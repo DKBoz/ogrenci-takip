@@ -1,0 +1,1116 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Öğrenci Takip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F3F5F8; --surface: #FFFFFF; --ink: #1B2433; --muted: #5A6476; --line: #D9DFE7;
+  --accent: #2C5A88; --accent-ink: #FFFFFF; --soft: #E7EEF6;
+  --present: #2F7A57; --present-bg: #E4F2EA;
+  --absent: #A65A12; --absent-bg: #FBEBDA;
+  --late: #6D50A8; --late-bg: #EEE8F7;
+  --excused: #2D6F8F; --excused-bg: #E2EFF5;
+  --radius: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121821; --surface: #1A222D; --ink: #E5E9EF; --muted: #9AA5B4; --line: #2B3543;
+    --accent: #86ADD8; --accent-ink: #0F1620; --soft: #223042;
+    --present: #7CCBA2; --present-bg: #1C3328;
+    --absent: #F0AE6C; --absent-bg: #3A2A1A;
+    --late: #B9A3E6; --late-bg: #2C2540;
+    --excused: #86C2DE; --excused-bg: #1C3340;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.5 "Atkinson Hyperlegible Next", system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2 { margin: 0; line-height: 1.25; }
+h2 { font-size: 1.15rem; font-weight: 700; }
+small { display: block; color: var(--muted); font-size: .88rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.logo { font-weight: 700; font-size: 1.1rem; letter-spacing: -.01em; white-space: nowrap; }
+.school { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: .95rem; }
+.who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
+
+.tabs {
+  display: flex; gap: 4px; padding: 8px 20px 0; background: var(--surface);
+  border-bottom: 1px solid var(--line); overflow-x: auto;
+}
+.tabs button {
+  border: 0; background: none; padding: 10px 14px; cursor: pointer; color: var(--muted);
+  border-bottom: 3px solid transparent; white-space: nowrap; font-weight: 600;
+}
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+
+.wrap { max-width: 920px; margin: 0 auto; padding: 20px 16px 120px; display: grid; gap: 16px; }
+.wrap.narrow { max-width: 520px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 14px; }
+.panel.empty p { margin: 0; }
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.stack { display: grid; gap: 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1 1 180px; }
+.top-gap { margin-top: 4px; }
+.muted { color: var(--muted); }
+.pad { padding: 8px 4px; }
+p { margin: 0; }
+
+.field { display: grid; gap: 4px; font-size: .9rem; color: var(--muted); font-weight: 600; }
+.field.inline { display: flex; align-items: center; gap: 8px; }
+input, select {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--ink); font-weight: 400; min-height: 44px;
+}
+.field.inline select { width: auto; }
+.w-no { width: 110px; flex: 0 0 110px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 720px) { .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); cursor: pointer; font-weight: 600;
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.ghost { background: transparent; }
+.btn.small { min-height: 36px; padding: 6px 12px; font-size: .92rem; }
+.btn.quiet { background: transparent; border-color: transparent; color: var(--muted); }
+.btn:disabled { opacity: .55; cursor: progress; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+.auth { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.auth-card { width: 100%; max-width: 400px; display: grid; gap: 16px; }
+.auth-card .logo { font-size: 1.6rem; }
+.auth-links { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.note { background: var(--soft); padding: 10px 12px; border-radius: 8px; }
+
+.state { font-size: .92rem; color: var(--muted); }
+.state.saved { color: var(--present); font-weight: 600; }
+
+.unit { border: 1px solid var(--line); border-radius: 8px; }
+.unit summary { padding: 10px 12px; cursor: pointer; font-weight: 600; }
+.objs { list-style: none; margin: 0; padding: 0 12px 8px; display: grid; gap: 2px; }
+.chk { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; padding: 8px 4px; cursor: pointer; border-radius: 6px; }
+.chk input { width: 20px; height: 20px; min-height: 0; margin: 2px 0 0; accent-color: var(--accent); }
+
+.roster { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.stu {
+  width: 100%; display: grid; grid-template-columns: 3.2em 1fr auto; align-items: center; gap: 10px;
+  padding: 10px 14px 10px 12px; border: 1px solid var(--line); border-left-width: 8px;
+  border-radius: 8px; background: var(--surface); cursor: pointer; text-align: left; min-height: 52px;
+  transition: background-color .15s, border-color .15s;
+}
+.stu .no { color: var(--muted); font-variant-numeric: tabular-nums; }
+.stu .nm { font-weight: 600; }
+.stu .st { font-weight: 700; font-size: .9rem; padding: 3px 10px; border-radius: 999px; min-width: 4.5em; text-align: center; }
+.st-present { border-left-color: var(--present); }
+.st-present .st { color: var(--present); background: var(--present-bg); }
+.st-absent { border-left-color: var(--absent); background: var(--absent-bg); }
+.st-absent .st { color: var(--absent); background: var(--surface); }
+.st-late { border-left-color: var(--late); background: var(--late-bg); }
+.st-late .st { color: var(--late); background: var(--surface); }
+.st-excused { border-left-color: var(--excused); background: var(--excused-bg); }
+.st-excused .st { color: var(--excused); background: var(--surface); }
+.tally { font-weight: 600; }
+.hint { font-size: .9rem; }
+
+.savebar {
+  position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: flex-end; gap: 10px;
+  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(transparent, var(--bg) 35%);
+}
+
+.recent, .classes, .members, .plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rec, .cls {
+  width: 100%; display: grid; gap: 2px; text-align: left; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer;
+}
+.rec { grid-template-columns: 1fr auto; }
+.rec .muted { grid-column: 1; font-size: .9rem; }
+.rec .miss { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: .9rem; color: var(--muted); }
+.rec.cur, .cls.cur { border-color: var(--accent); background: var(--soft); }
+.classes { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.classes.courses { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.cls .muted { font-size: .9rem; }
+.plain li { display: grid; grid-template-columns: 3.2em 1fr auto; gap: 10px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.plain .no { color: var(--muted); font-variant-numeric: tabular-nums; }
+.members li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.members select { width: auto; }
+.code { font-size: 1.4rem; font-weight: 700; letter-spacing: .12em; padding: 6px 14px; background: var(--soft); border-radius: 8px; }
+
+.scroll { overflow-x: auto; }
+table.list { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.list th, .list td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.list th { color: var(--muted); font-weight: 600; }
+.list input { min-height: 38px; padding: 6px 8px; }
+
+#toast {
+  position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 140%);
+  background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 10px; max-width: min(92vw, 520px);
+  z-index: 50; transition: transform .2s; font-weight: 600;
+}
+#toast.show { transform: translate(-50%, 0); }
+#toast.bad { background: var(--absent); color: #fff; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"><p class="pad muted">Yükleniyor…</p></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// ===== Ayarlar: Supabase projesinin adresi ve publishable anahtarı =====
+const SUPABASE_URL = 'https://ixqeazpoerbpryrvamkr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_KnM1ZYjZZ6xsMnnyIE41IA_hwYE-wCv';
+// ========================================================================
+
+const BOOT_HASH = location.hash;
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const STATUS = {
+  present: { label: 'Var', next: 'absent' },
+  absent: { label: 'Yok', next: 'late' },
+  late: { label: 'Geç', next: 'excused' },
+  excused: { label: 'İzinli', next: 'present' },
+};
+
+const S = {
+  user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null,
+  tab: 'lessons', year: currentYear(), classes: [], courses: [], objCache: {},
+  L: null, students: [], objectives: [], recent: [],
+  classView: null, courseView: null, importPreview: null, coursePreview: null, authMode: 'login',
+};
+
+// ---------- Yardımcılar ----------
+const app = document.getElementById('app');
+const $ = (s, el = document) => el.querySelector(s);
+const view = () => document.getElementById('view');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const opt = (v, l, cur) => `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(l)}</option>`;
+const empty = msg => `<section class="panel empty"><p>${esc(msg)}</p></section>`;
+const isAdmin = () => S.role === 'school_admin';
+const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'tr', { numeric: true });
+const byNo = (a, b) => (parseInt(a.school_no, 10) || 1e9) - (parseInt(b.school_no, 10) || 1e9) || a.full_name.localeCompare(b.full_name, 'tr');
+
+function toast(msg, bad) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (bad ? ' bad' : '');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.className = ''; }, bad ? 5000 : 2800);
+}
+function fail(error, where) {
+  if (!error) return false;
+  console.error(where, error);
+  toast((where ? where + ': ' : '') + (error.message || error), true);
+  return true;
+}
+function keep(k, v) { try { localStorage.setItem('ot_' + k, JSON.stringify(v)); } catch (e) {} }
+function restore(k, d) { try { const v = localStorage.getItem('ot_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
+function today() { return new Date().toLocaleDateString('sv'); }
+function currentYear() {
+  const d = new Date(), y = d.getFullYear();
+  return d.getMonth() >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+}
+function fmtDate(d) {
+  return new Date(d + 'T12:00:00').toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'long' });
+}
+function titleCase(s) {
+  return s.toLocaleLowerCase('tr').replace(/(^|[\s\-'’.])(\p{L})/gu, (m, a, b) => a + b.toLocaleUpperCase('tr'));
+}
+function chunks(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }
+
+// ---------- Giriş ----------
+function renderAuth(mode, msg) {
+  S.authMode = mode;
+  const titles = { login: 'Giriş yap', signup: 'Hesap oluştur', forgot: 'Şifremi unuttum', setpass: 'Yeni şifre belirle' };
+  const actions = { login: 'Giriş yap', signup: 'Hesap oluştur', forgot: 'Sıfırlama bağlantısı gönder', setpass: 'Şifreyi kaydet' };
+  app.innerHTML = `<div class="auth"><div class="auth-card">
+    <h1 class="logo">Öğrenci Takip</h1>
+    <h2>${titles[mode]}</h2>
+    ${msg ? `<p class="note">${esc(msg)}</p>` : ''}
+    <form id="authForm" class="stack">
+      ${mode === 'signup' || mode === 'setpass' ? `<label class="field">Ad soyad<input name="full_name" autocomplete="name" ${mode === 'signup' ? 'required' : ''}></label>` : ''}
+      ${mode !== 'setpass' ? `<label class="field">E-posta<input name="email" type="email" autocomplete="email" required></label>` : ''}
+      ${mode !== 'forgot' ? `<label class="field">${mode === 'setpass' ? 'Yeni şifre' : 'Şifre'}<input name="password" type="password" minlength="6" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" required></label>` : ''}
+      <button class="btn primary" type="submit">${actions[mode]}</button>
+    </form>
+    <div class="auth-links">
+      ${mode === 'login' ? `<button class="link" data-mode="signup">Hesabın yok mu? Hesap oluştur</button><button class="link" data-mode="forgot">Şifremi unuttum</button>` : ''}
+      ${mode === 'signup' || mode === 'forgot' ? `<button class="link" data-mode="login">Girişe dön</button>` : ''}
+    </div>
+  </div></div>`;
+  app.querySelectorAll('[data-mode]').forEach(b => { b.onclick = () => renderAuth(b.dataset.mode); });
+  $('#authForm').onsubmit = onAuthSubmit;
+}
+
+function loginError(e) {
+  if (/invalid/i.test(e.message)) return 'E-posta veya şifre hatalı.';
+  if (/confirm/i.test(e.message)) return 'E-posta adresin henüz onaylanmamış. Gelen kutundaki bağlantıya tıkla.';
+  return e.message;
+}
+
+async function onAuthSubmit(e) {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(e.target));
+  const btn = e.target.querySelector('button');
+  btn.disabled = true;
+  const redirect = location.origin + location.pathname;
+  try {
+    const mode = S.authMode;
+    if (mode === 'login') {
+      const { data, error } = await sb.auth.signInWithPassword({ email: f.email.trim(), password: f.password });
+      if (error) return renderAuth('login', loginError(error));
+      await afterLogin(data.session);
+    } else if (mode === 'signup') {
+      const { data, error } = await sb.auth.signUp({
+        email: f.email.trim(), password: f.password,
+        options: { data: { full_name: f.full_name.trim() }, emailRedirectTo: redirect },
+      });
+      if (error) return renderAuth('signup', error.message);
+      if (data.session) await afterLogin(data.session);
+      else renderAuth('login', 'Onay e-postası gönderildi. E-postandaki bağlantıya tıkladıktan sonra giriş yapabilirsin.');
+    } else if (mode === 'forgot') {
+      const { error } = await sb.auth.resetPasswordForEmail(f.email.trim(), { redirectTo: redirect });
+      renderAuth('login', error ? error.message : 'Şifre sıfırlama bağlantısı e-postana gönderildi.');
+    } else if (mode === 'setpass') {
+      const { error } = await sb.auth.updateUser({ password: f.password });
+      if (error) return renderAuth('setpass', error.message);
+      const { data: { session } } = await sb.auth.getSession();
+      if (f.full_name && f.full_name.trim()) {
+        await sb.from('profiles').update({ full_name: f.full_name.trim() }).eq('id', session.user.id);
+      }
+      history.replaceState(null, '', location.pathname);
+      await afterLogin(session);
+    }
+  } finally {
+    if (btn.isConnected) btn.disabled = false;
+  }
+}
+
+async function afterLogin(session) {
+  S.user = session.user;
+  const { data: prof } = await sb.from('profiles').select('*').eq('id', S.user.id).maybeSingle();
+  S.profile = prof || { full_name: '', email: S.user.email };
+  const { data: mem, error } = await sb.from('memberships').select('school_id, role, status').eq('user_id', S.user.id);
+  if (fail(error, 'Üyelik')) return;
+  S.memberships = (mem || []).filter(m => m.status !== 'removed');
+  const active = S.memberships.filter(m => m.status === 'active');
+  if (!active.length) { S.schools = []; return renderNoSchool(); }
+  const { data: schools } = await sb.from('schools').select('id, name, join_code').in('id', active.map(m => m.school_id));
+  S.schools = (schools || []).sort(byName);
+  const saved = restore('school', null);
+  const pick = active.find(m => m.school_id === saved) || active[0];
+  await openSchool(pick.school_id);
+}
+
+function topBar(withSchool = true) {
+  const active = S.memberships.filter(m => m.status === 'active');
+  const school = S.schools.find(s => s.id === S.schoolId);
+  let schoolPart = '';
+  if (withSchool) {
+    schoolPart = active.length > 1
+      ? `<select id="schoolSel" aria-label="Okul">${S.schools.map(s => opt(s.id, s.name, S.schoolId)).join('')}</select>`
+      : `<span class="school">${esc(school ? school.name : '')}</span>`;
+  }
+  return `<header class="top">
+    <div class="brand"><span class="logo">Öğrenci Takip</span>${schoolPart}</div>
+    <div class="who"><span>${esc(S.profile.full_name || S.user.email)}</span><button class="link" id="logout">Çıkış</button></div>
+  </header>`;
+}
+function bindTop() {
+  $('#logout').onclick = () => sb.auth.signOut();
+  const ss = $('#schoolSel');
+  if (ss) ss.onchange = () => openSchool(ss.value);
+}
+
+function renderNoSchool() {
+  const pending = S.memberships.some(m => m.status === 'pending');
+  app.innerHTML = `${topBar(false)}<main class="wrap narrow"><section class="panel">
+    ${pending
+      ? `<h2>Onay bekleniyor</h2><p>Okul yöneticisi katılım isteğini onayladığında okulun burada açılacak.</p><div class="row"><button class="btn" id="refresh">Yenile</button></div><p class="muted">Başka bir okula da katılmak istersen kodunu aşağıya girebilirsin.</p>`
+      : `<h2>Okuluna katıl</h2><p>Okul yöneticisinden aldığın katılım kodunu gir.</p>`}
+    <form id="joinForm" class="row">
+      <input name="code" class="grow" placeholder="Katılım kodu" autocapitalize="characters" autocomplete="off" required>
+      <button class="btn primary">Katıl</button>
+    </form>
+    ${S.profile.is_platform_admin ? `<p class="muted">Platform yöneticisisin. Yeni okulları şimdilik SQL ile açıyorsun.</p>` : ''}
+  </section></main>`;
+  bindTop();
+  const r = $('#refresh');
+  if (r) r.onclick = async () => { const { data: { session } } = await sb.auth.getSession(); afterLogin(session); };
+  $('#joinForm').onsubmit = async e => {
+    e.preventDefault();
+    const code = new FormData(e.target).get('code');
+    const { error } = await sb.rpc('join_school', { code });
+    if (fail(error, 'Katılım')) return;
+    toast('Katılım isteğin gönderildi.');
+    const { data: { session } } = await sb.auth.getSession();
+    afterLogin(session);
+  };
+}
+
+// ---------- Okul ve sekmeler ----------
+async function openSchool(id) {
+  S.schoolId = id;
+  S.role = (S.memberships.find(m => m.school_id === id) || {}).role;
+  keep('school', id);
+  S.objCache = {}; S.L = null; S.classView = null; S.courseView = null; S.importPreview = null; S.coursePreview = null;
+  await Promise.all([loadClasses(), loadCourses()]);
+  renderShell();
+}
+async function loadClasses() {
+  const { data, error } = await sb.from('classes').select('id, name, grade, academic_year, sort').eq('school_id', S.schoolId);
+  if (fail(error, 'Sınıflar')) return;
+  S.classes = (data || []).sort(byName);
+}
+async function loadCourses() {
+  const { data, error } = await sb.from('courses')
+    .select('id, code, title, subject, grade, book, note, scale, draft, active').eq('school_id', S.schoolId);
+  if (fail(error, 'Dersler')) return;
+  S.courses = (data || []).sort((a, b) => a.title.localeCompare(b.title, 'tr', { numeric: true }));
+}
+async function getObjectives(courseId) {
+  if (S.objCache[courseId]) return S.objCache[courseId];
+  const { data, error } = await sb.from('objectives')
+    .select('id, code, unit, sort, area, label, description, example').eq('course_id', courseId).order('sort');
+  if (fail(error, 'Kazanımlar')) return [];
+  S.objCache[courseId] = data || [];
+  return S.objCache[courseId];
+}
+const yearClasses = () => S.classes.filter(c => c.academic_year === S.year);
+
+function renderShell() {
+  const tabs = [['lessons', 'Ders ve yoklama'], ['classes', 'Sınıflar'], ['courses', 'Dersler']];
+  if (isAdmin()) tabs.push(['school', 'Okul']);
+  if (!tabs.some(t => t[0] === S.tab)) S.tab = 'lessons';
+  app.innerHTML = `${topBar()}
+    <nav class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${S.tab === k}" data-tab="${k}">${l}</button>`).join('')}</nav>
+    <main class="wrap" id="view"></main>`;
+  bindTop();
+  app.querySelectorAll('[data-tab]').forEach(b => {
+    b.onclick = () => {
+      if (S.tab === 'lessons' && S.L && S.L.dirty && !confirm('Kaydedilmemiş yoklama değişiklikleri kaybolacak. Devam edilsin mi?')) return;
+      if (S.L) S.L.dirty = false;
+      S.tab = b.dataset.tab;
+      renderShell();
+    };
+  });
+  ({ lessons: viewLessons, classes: viewClasses, courses: viewCourses, school: viewSchool })[S.tab]();
+}
+
+// ---------- Ders ve yoklama ----------
+function coursesFor(classId) {
+  const g = (S.classes.find(c => c.id === classId) || {}).grade;
+  const act = S.courses.filter(c => c.active);
+  const match = act.filter(c => g && c.grade === g);
+  return match.length ? match : act;
+}
+function pickCourse(classId, pref) {
+  const list = coursesFor(classId);
+  const c = list.find(x => x.id === pref) || list[0];
+  return c ? c.id : null;
+}
+function guard(go, revert) {
+  if (S.L.dirty && !confirm('Kaydedilmemiş değişiklikler kaybolacak. Devam edilsin mi?')) { if (revert) revert(); return; }
+  S.L.dirty = false;
+  go();
+}
+
+async function viewLessons() {
+  const cls = yearClasses();
+  if (!cls.length) {
+    view().innerHTML = empty(isAdmin()
+      ? `${S.year} eğitim yılı için sınıf yok. Sınıflar sekmesinden e-Okul sınıf listesini yükleyin.`
+      : `${S.year} eğitim yılı için sınıf yok. Okul yöneticiniz sınıf listesini yüklediğinde burada görünecek.`);
+    return;
+  }
+  if (!S.courses.length) {
+    view().innerHTML = empty(isAdmin()
+      ? 'Henüz ders yok. Dersler sekmesinden rubrik dosyasını içe aktarın.'
+      : 'Henüz ders yok. Okul yöneticiniz dersleri eklediğinde burada görünecek.');
+    return;
+  }
+  if (!S.L) {
+    const last = restore('lesson_' + S.schoolId, {});
+    const classId = (cls.find(c => c.id === last.classId) || cls[0]).id;
+    S.L = { classId, courseId: pickCourse(classId, last.courseId), date: today(), period: last.period || 1,
+      lessonId: null, topic: '', objectives: new Set(), att: new Map(), dirty: false };
+  }
+  await loadLesson();
+}
+
+async function loadLesson() {
+  const L = S.L;
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  const [st, ls, rc] = await Promise.all([
+    sb.from('students').select('id, full_name, school_no').eq('class_id', L.classId).eq('active', true),
+    sb.from('lessons').select('id, course_id, topic').eq('class_id', L.classId).eq('lesson_date', L.date).eq('period', L.period).maybeSingle(),
+    sb.from('lessons').select('id, course_id, lesson_date, period, topic').eq('class_id', L.classId)
+      .order('lesson_date', { ascending: false }).order('period', { ascending: false }).limit(8),
+  ]);
+  if (fail(st.error, 'Öğrenciler') || fail(ls.error, 'Ders') || fail(rc.error, 'Son dersler')) return;
+  S.students = (st.data || []).sort(byNo);
+  L.att = new Map(); L.objectives = new Set(); L.lessonId = null; L.topic = ''; L.dirty = false;
+  if (ls.data) {
+    L.lessonId = ls.data.id; L.courseId = ls.data.course_id; L.topic = ls.data.topic || '';
+    const [lo, at] = await Promise.all([
+      sb.from('lesson_objectives').select('objective_id').eq('lesson_id', L.lessonId),
+      sb.from('attendance').select('student_id, status').eq('lesson_id', L.lessonId),
+    ]);
+    (lo.data || []).forEach(r => L.objectives.add(r.objective_id));
+    (at.data || []).forEach(r => L.att.set(r.student_id, r.status));
+  }
+  S.recent = rc.data || [];
+  if (S.recent.length) {
+    const { data } = await sb.from('attendance').select('lesson_id, status')
+      .in('lesson_id', S.recent.map(r => r.id)).neq('status', 'present');
+    const cnt = {};
+    (data || []).forEach(r => { cnt[r.lesson_id] = cnt[r.lesson_id] || { absent: 0, late: 0, excused: 0 }; cnt[r.lesson_id][r.status]++; });
+    S.recent.forEach(r => { r.cnt = cnt[r.id] || { absent: 0, late: 0, excused: 0 }; });
+  }
+  S.objectives = L.courseId ? await getObjectives(L.courseId) : [];
+  keep('lesson_' + S.schoolId, { classId: L.classId, courseId: L.courseId, period: L.period });
+  drawLesson();
+}
+
+function groupUnits(objs) {
+  const out = [];
+  let cur = null;
+  for (const o of objs) {
+    if (!cur || cur.name !== o.unit) { cur = { name: o.unit, items: [] }; out.push(cur); }
+    cur.items.push(o);
+  }
+  return out;
+}
+
+function stuRow(s) {
+  const st = S.L.att.get(s.id) || 'present';
+  return `<li><button type="button" class="stu st-${st}" data-stu="${s.id}" aria-label="${esc(s.full_name)}: ${STATUS[st].label}">
+    <span class="no">${esc(s.school_no || '')}</span><span class="nm">${esc(s.full_name)}</span><span class="st">${STATUS[st].label}</span>
+  </button></li>`;
+}
+function paintRow(btn, id) {
+  const st = S.L.att.get(id) || 'present';
+  const s = S.students.find(x => x.id === id);
+  btn.className = 'stu st-' + st;
+  btn.querySelector('.st').textContent = STATUS[st].label;
+  btn.setAttribute('aria-label', `${s ? s.full_name : ''}: ${STATUS[st].label}`);
+}
+function updateCounts() {
+  const c = $('#objCount');
+  if (c) c.textContent = S.L.objectives.size ? `${S.L.objectives.size} seçili` : 'Seçim yok';
+  const t = $('#tally');
+  if (t) {
+    const n = { present: 0, absent: 0, late: 0, excused: 0 };
+    S.students.forEach(s => { n[S.L.att.get(s.id) || 'present']++; });
+    t.textContent = `${n.present} var, ${n.absent} yok, ${n.late} geç, ${n.excused} izinli`;
+  }
+}
+
+function recentHtml() {
+  if (!S.recent.length) return '';
+  return `<section class="panel"><h2>Bu sınıfın son dersleri</h2><ul class="recent">${S.recent.map(r => {
+    const c = S.courses.find(x => x.id === r.course_id);
+    const miss = r.cnt.absent + r.cnt.excused;
+    const cur = r.lesson_date === S.L.date && Number(r.period) === Number(S.L.period);
+    return `<li><button type="button" class="rec ${cur ? 'cur' : ''}" data-date="${r.lesson_date}" data-period="${r.period}">
+      <span>${fmtDate(r.lesson_date)}, ${r.period}. ders</span>
+      <span class="muted">${esc(c ? c.title : '')}${r.topic ? ', ' + esc(r.topic) : ''}</span>
+      <span class="miss">${miss ? miss + ' devamsız' : 'Tam katılım'}</span>
+    </button></li>`;
+  }).join('')}</ul></section>`;
+}
+
+function drawLesson() {
+  const L = S.L;
+  const list = coursesFor(L.classId).slice();
+  if (L.courseId && !list.some(c => c.id === L.courseId)) {
+    const c = S.courses.find(x => x.id === L.courseId);
+    if (c) list.unshift(c);
+  }
+  const units = groupUnits(S.objectives);
+  view().innerHTML = `
+  <section class="panel">
+    <div class="grid4">
+      <label class="field">Sınıf<select id="lClass">${yearClasses().map(c => opt(c.id, c.name, L.classId)).join('')}</select></label>
+      <label class="field">Ders<select id="lCourse">${list.map(c => opt(c.id, c.title, L.courseId)).join('')}</select></label>
+      <label class="field">Tarih<input id="lDate" type="date" value="${L.date}"></label>
+      <label class="field">Ders saati<select id="lPeriod">${Array.from({ length: 10 }, (_, i) => opt(i + 1, (i + 1) + '. ders', L.period)).join('')}</select></label>
+    </div>
+    <p class="state ${L.lessonId ? 'saved' : ''}">${L.lessonId ? 'Bu ders kayıtlı. Değişiklik yapıp yeniden kaydedebilirsin.' : 'Bu ders için henüz kayıt yok.'}</p>
+  </section>
+
+  <section class="panel">
+    <div class="head"><h2>İşlenen kazanımlar</h2><span class="muted" id="objCount"></span></div>
+    ${units.length ? units.map(u => `<details class="unit" ${u.items.some(o => L.objectives.has(o.id)) ? 'open' : ''}>
+      <summary>${esc(u.name || 'Ünite')} <span class="muted">(${u.items.length})</span></summary>
+      <ul class="objs">${u.items.map(o => `<li><label class="chk"><input type="checkbox" data-obj="${o.id}" ${L.objectives.has(o.id) ? 'checked' : ''}>
+        <span>${esc(o.label)}${o.description ? `<small>${esc(o.description)}</small>` : ''}</span></label></li>`).join('')}</ul>
+    </details>`).join('') : `<p class="muted">Bu derse ait kazanım yok.</p>`}
+    <label class="field">Konu veya not<input id="lTopic" value="${esc(L.topic)}" placeholder="İsteğe bağlı"></label>
+  </section>
+
+  <section class="panel">
+    <div class="head"><h2>Yoklama</h2><button type="button" class="btn ghost small" id="allPresent">Hepsini var yap</button></div>
+    <p class="muted tally" id="tally"></p>
+    ${S.students.length
+      ? `<ol class="roster" id="roster">${S.students.map(stuRow).join('')}</ol><p class="muted hint">Öğrencinin satırına dokundukça durum değişir: var, yok, geç, izinli.</p>`
+      : `<p class="muted">Bu sınıfta öğrenci yok.</p>`}
+  </section>
+
+  <div class="savebar">
+    ${L.lessonId ? `<button type="button" class="btn quiet" id="delLesson">Dersi sil</button>` : ''}
+    <button type="button" class="btn primary" id="saveLesson">${L.lessonId ? 'Değişiklikleri kaydet' : 'Dersi kaydet'}</button>
+  </div>
+  ${recentHtml()}`;
+
+  updateCounts();
+  $('#lClass').onchange = e => guard(() => { L.classId = e.target.value; L.courseId = pickCourse(L.classId, L.courseId); loadLesson(); }, () => { e.target.value = L.classId; });
+  $('#lDate').onchange = e => { if (!e.target.value) return; guard(() => { L.date = e.target.value; loadLesson(); }, () => { e.target.value = L.date; }); };
+  $('#lPeriod').onchange = e => guard(() => { L.period = Number(e.target.value); loadLesson(); }, () => { e.target.value = L.period; });
+  $('#lCourse').onchange = async e => {
+    L.courseId = e.target.value;
+    L.objectives = new Set();
+    L.dirty = true;
+    S.objectives = await getObjectives(L.courseId);
+    drawLesson();
+  };
+  view().querySelectorAll('[data-obj]').forEach(cb => {
+    cb.onchange = () => { if (cb.checked) L.objectives.add(cb.dataset.obj); else L.objectives.delete(cb.dataset.obj); L.dirty = true; updateCounts(); };
+  });
+  $('#lTopic').oninput = e => { L.topic = e.target.value; L.dirty = true; };
+  const roster = $('#roster');
+  if (roster) roster.onclick = e => {
+    const b = e.target.closest('[data-stu]');
+    if (!b) return;
+    const id = b.dataset.stu;
+    L.att.set(id, STATUS[L.att.get(id) || 'present'].next);
+    L.dirty = true;
+    paintRow(b, id);
+    updateCounts();
+  };
+  $('#allPresent').onclick = () => {
+    S.students.forEach(s => L.att.set(s.id, 'present'));
+    L.dirty = true;
+    view().querySelectorAll('[data-stu]').forEach(b => paintRow(b, b.dataset.stu));
+    updateCounts();
+  };
+  $('#saveLesson').onclick = saveLesson;
+  const del = $('#delLesson');
+  if (del) del.onclick = deleteLesson;
+  view().querySelectorAll('.rec').forEach(b => {
+    b.onclick = () => guard(() => { L.date = b.dataset.date; L.period = Number(b.dataset.period); loadLesson(); });
+  });
+}
+
+async function saveLesson() {
+  const L = S.L;
+  const btn = $('#saveLesson');
+  btn.disabled = true;
+  try {
+    if (!L.courseId) { toast('Önce bir ders seç.', true); return; }
+    let id = L.lessonId;
+    if (id) {
+      const { error } = await sb.from('lessons').update({ course_id: L.courseId, topic: L.topic.trim() }).eq('id', id);
+      if (fail(error, 'Ders kaydedilemedi')) return;
+    } else {
+      const { data, error } = await sb.from('lessons').insert({
+        school_id: S.schoolId, class_id: L.classId, course_id: L.courseId,
+        lesson_date: L.date, period: Number(L.period), topic: L.topic.trim(),
+      }).select('id').single();
+      if (error && error.code === '23505') { toast('Bu sınıf için bu saatte başka bir ders kaydı var. Sayfayı yenile.', true); return; }
+      if (fail(error, 'Ders kaydedilemedi')) return;
+      id = data.id;
+    }
+    const del = await sb.from('lesson_objectives').delete().eq('lesson_id', id);
+    if (fail(del.error, 'Kazanımlar')) return;
+    if (L.objectives.size) {
+      const { error } = await sb.from('lesson_objectives')
+        .insert([...L.objectives].map(o => ({ lesson_id: id, objective_id: o, school_id: S.schoolId })));
+      if (fail(error, 'Kazanımlar')) return;
+    }
+    if (S.students.length) {
+      const { error } = await sb.from('attendance').upsert(
+        S.students.map(s => ({ lesson_id: id, student_id: s.id, school_id: S.schoolId, status: L.att.get(s.id) || 'present' })),
+        { onConflict: 'lesson_id,student_id' });
+      if (fail(error, 'Yoklama')) return;
+    }
+    L.dirty = false;
+    toast('Ders kaydedildi.');
+    await loadLesson();
+  } finally {
+    const b = $('#saveLesson');
+    if (b) b.disabled = false;
+  }
+}
+
+async function deleteLesson() {
+  if (!confirm('Bu ders kaydı ve yoklaması silinsin mi?')) return;
+  const { error } = await sb.from('lessons').delete().eq('id', S.L.lessonId);
+  if (fail(error, 'Ders silinemedi')) return;
+  toast('Ders silindi.');
+  await loadLesson();
+}
+
+// ---------- Sınıflar ----------
+async function viewClasses() {
+  const years = [...new Set([currentYear(), S.year, ...S.classes.map(c => c.academic_year)])].sort().reverse();
+  const cls = yearClasses();
+  const counts = {};
+  await Promise.all(cls.map(async c => {
+    const { count } = await sb.from('students').select('id', { count: 'exact', head: true }).eq('class_id', c.id).eq('active', true);
+    counts[c.id] = count || 0;
+  }));
+  view().innerHTML = `<section class="panel">
+    <div class="head"><h2>Sınıflar</h2>
+      <label class="field inline">Eğitim yılı<select id="yearSel">${years.map(y => opt(y, y, S.year)).join('')}</select></label></div>
+    ${cls.length
+      ? `<ul class="classes">${cls.map(c => `<li><button type="button" class="cls ${S.classView === c.id ? 'cur' : ''}" data-cls="${c.id}"><b>${esc(c.name)}</b><span class="muted">${counts[c.id]} öğrenci</span></button></li>`).join('')}</ul>`
+      : `<p class="muted">${S.year} için sınıf yok.</p>`}
+    ${isAdmin() ? `<div class="row top-gap">
+      <button type="button" class="btn" id="eokulBtn">e-Okul sınıf listesi yükle</button>
+      <input type="file" id="eokulIn" accept=".xls,.xlsx" hidden>
+      <span class="muted">Dosya tarayıcında okunur, yalnızca okul no, ad soyad ve sınıf kaydedilir.</span></div>` : ''}
+  </section>
+  <div id="importBox"></div>
+  <div id="classBox"></div>`;
+
+  $('#yearSel').onchange = e => { S.year = e.target.value; S.classView = null; S.L = null; viewClasses(); };
+  view().querySelectorAll('[data-cls]').forEach(b => {
+    b.onclick = () => {
+      S.classView = b.dataset.cls;
+      view().querySelectorAll('[data-cls]').forEach(x => x.classList.toggle('cur', x === b));
+      showClass(S.classView);
+    };
+  });
+  if (isAdmin()) {
+    $('#eokulBtn').onclick = () => $('#eokulIn').click();
+    $('#eokulIn').onchange = async e => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        const groups = parseEokul(wb);
+        if (!groups.length) { toast('Dosyada "Ad Soyad" ve "No" sütunları bulunamadı.', true); return; }
+        S.importPreview = groups;
+        drawImport();
+      } catch (err) {
+        toast('Dosya okunamadı: ' + err.message, true);
+      }
+    };
+  }
+  if (S.importPreview) drawImport();
+  if (S.classView && cls.some(c => c.id === S.classView)) showClass(S.classView);
+}
+
+async function showClass(id) {
+  const c = S.classes.find(x => x.id === id);
+  const box = $('#classBox');
+  if (!c || !box) return;
+  const { data, error } = await sb.from('students').select('id, full_name, school_no, active').eq('class_id', id).eq('active', true);
+  if (fail(error, 'Öğrenciler')) return;
+  const st = (data || []).sort(byNo);
+  box.innerHTML = `<section class="panel">
+    <div class="head"><h2>${esc(c.name)}</h2><span class="muted">${st.length} öğrenci${c.grade ? ', düzey ' + esc(c.grade) : ''}</span></div>
+    ${st.length ? `<ol class="plain">${st.map(s => `<li><span class="no">${esc(s.school_no || '')}</span><span>${esc(s.full_name)}</span>
+      ${isAdmin() ? `<button type="button" class="btn quiet small" data-off="${s.id}">Listeden çıkar</button>` : '<span></span>'}</li>`).join('')}</ol>`
+      : `<p class="muted">Bu sınıfta öğrenci yok.</p>`}
+    <form id="addStu" class="row top-gap">
+      <input name="school_no" class="w-no" placeholder="Okul no" inputmode="numeric">
+      <input name="full_name" class="grow" placeholder="Ad soyad" required>
+      <button class="btn">Öğrenci ekle</button>
+    </form>
+  </section>`;
+  $('#addStu').onsubmit = async e => {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target));
+    const { error } = await sb.from('students').insert({
+      school_id: S.schoolId, class_id: id, school_no: f.school_no.trim() || null, full_name: titleCase(f.full_name.trim()),
+    });
+    if (error && error.code === '23505') { toast('Bu okul numarası başka bir öğrencide kayıtlı.', true); return; }
+    if (fail(error, 'Öğrenci eklenemedi')) return;
+    toast('Öğrenci eklendi.');
+    showClass(id);
+  };
+  box.querySelectorAll('[data-off]').forEach(b => {
+    b.onclick = async () => {
+      if (!confirm('Öğrenci listeden çıkarılsın mı? Kayıtları silinmez.')) return;
+      const { error } = await sb.from('students').update({ active: false }).eq('id', b.dataset.off);
+      if (fail(error, 'Öğrenci')) return;
+      showClass(id);
+    };
+  });
+}
+
+function normClass(s) {
+  const raw = String(s).replace(/\s+/g, ' ').trim();
+  const m = raw.toLocaleUpperCase('tr').match(/^(\d{1,2})\s*[-./ ]?\s*([A-ZÇĞİÖŞÜ])$/);
+  return m ? `${m[1]}-${m[2]}` : raw;
+}
+function guessGrade(name) {
+  const m = name.match(/^(\d{1,2})/);
+  if (m) return m[1];
+  return /ANA|YAŞ/.test(name.toLocaleUpperCase('tr')) ? 'ana' : '';
+}
+
+function parseEokul(wb) {
+  const up = v => String(v ?? '').toLocaleUpperCase('tr').replace(/\s+/g, ' ').trim();
+  const groups = new Map();
+  for (const sn of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '', raw: false });
+    let h = -1, cName = -1, cNo = -1, cCls = -1, titleClass = '';
+    for (let i = 0; i < Math.min(rows.length, 50); i++) {
+      const r = rows[i].map(up);
+      if (!titleClass) {
+        const joined = r.join(' ');
+        const t = joined.match(/(\d{1,2})\s*\.?\s*SINIF\s*\/?\s*([A-ZÇĞİÖŞÜ])\s*ŞUBE/);
+        if (t) titleClass = `${t[1]}-${t[2]}`;
+      }
+      const n = r.findIndex(v => v.includes('SOYAD'));
+      if (n < 0) continue;
+      h = i; cName = n;
+      cNo = r.findIndex(v => ['NO', 'NO.', 'OKUL NO', 'ÖĞRENCİ NO', 'NUMARA', 'NUMARASI'].includes(v));
+      cCls = r.findIndex(v => ['SINIF', 'ŞUBE', 'SINIF/ŞUBE', 'SINIFI', 'SINIF ŞUBE'].includes(v));
+      break;
+    }
+    if (h < 0 || cNo < 0) continue;
+    for (const row of rows.slice(h + 1)) {
+      const name = String(row[cName] ?? '').replace(/\s+/g, ' ').trim();
+      const no = String(row[cNo] ?? '').trim();
+      if (!name || !/^\d+$/.test(no)) continue;
+      const fromCol = cCls >= 0 ? String(row[cCls] ?? '').trim() : '';
+      const cls = normClass(fromCol || titleClass || sn);
+      if (!groups.has(cls)) groups.set(cls, { name: cls, grade: guessGrade(cls), students: [] });
+      groups.get(cls).students.push({ no, name: titleCase(name) });
+    }
+  }
+  return [...groups.values()].sort(byName);
+}
+
+function drawImport() {
+  const g = S.importPreview;
+  const box = $('#importBox');
+  if (!box || !g) return;
+  const total = g.reduce((a, x) => a + x.students.length, 0);
+  box.innerHTML = `<section class="panel">
+    <div class="head"><h2>İçe aktarma önizlemesi</h2><span class="muted">${S.year} eğitim yılı</span></div>
+    <p class="muted">Sınıf adlarını ve düzeylerini kontrol et. Düzey, derslerin sınıfla eşleşmesi için kullanılır (örneğin 3 veya ana).</p>
+    <div class="scroll"><table class="list"><thead><tr><th>Sınıf</th><th>Düzey</th><th>Öğrenci</th></tr></thead><tbody>
+      ${g.map((x, i) => `<tr><td><input data-gi="${i}" data-k="name" value="${esc(x.name)}" aria-label="Sınıf adı"></td>
+        <td><input data-gi="${i}" data-k="grade" value="${esc(x.grade)}" class="w-no" aria-label="Düzey"></td><td>${x.students.length}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="muted">Aynı okul numarasına sahip öğrenciler güncellenir. Yüklenen sınıflarda olup bu listede bulunmayan öğrenciler listeden çıkarılır, kayıtları silinmez.</p>
+    <div class="row"><button type="button" class="btn primary" id="doImport">${total} öğrenciyi içe aktar</button>
+      <button type="button" class="btn ghost" id="cancelImport">Vazgeç</button></div>
+  </section>`;
+  box.querySelectorAll('[data-gi]').forEach(inp => { inp.oninput = () => { g[Number(inp.dataset.gi)][inp.dataset.k] = inp.value.trim(); }; });
+  $('#cancelImport').onclick = () => { S.importPreview = null; box.innerHTML = ''; };
+  $('#doImport').onclick = doImport;
+}
+
+async function doImport() {
+  const btn = $('#doImport');
+  btn.disabled = true;
+  try {
+    const merged = new Map();
+    for (const x of S.importPreview) {
+      if (!x.name) { toast('Boş sınıf adı var.', true); return; }
+      if (!merged.has(x.name)) merged.set(x.name, { name: x.name, grade: x.grade, students: [] });
+      merged.get(x.name).students.push(...x.students);
+    }
+    const groups = [...merged.values()];
+    const { data: cls, error } = await sb.from('classes')
+      .upsert(groups.map(x => ({ school_id: S.schoolId, academic_year: S.year, name: x.name, grade: x.grade })),
+        { onConflict: 'school_id,academic_year,name' })
+      .select('id, name');
+    if (fail(error, 'Sınıflar')) return;
+    const idOf = Object.fromEntries(cls.map(c => [c.name, c.id]));
+    const byNoMap = new Map();
+    groups.forEach(x => x.students.forEach(s => byNoMap.set(s.no, {
+      school_id: S.schoolId, class_id: idOf[x.name], school_no: s.no, full_name: s.name, active: true,
+    })));
+    const rows = [...byNoMap.values()];
+    for (const part of chunks(rows, 500)) {
+      const { error: e2 } = await sb.from('students').upsert(part, { onConflict: 'school_id,school_no' });
+      if (fail(e2, 'Öğrenciler')) return;
+    }
+    for (const c of cls) {
+      const { data } = await sb.from('students').select('id, school_no').eq('class_id', c.id).eq('active', true);
+      const gone = (data || []).filter(s => s.school_no && !byNoMap.has(s.school_no)).map(s => s.id);
+      if (gone.length) await sb.from('students').update({ active: false }).in('id', gone);
+    }
+    toast(`${rows.length} öğrenci içe aktarıldı.`);
+    S.importPreview = null;
+    S.L = null;
+    await loadClasses();
+    viewClasses();
+  } finally {
+    if (btn.isConnected) btn.disabled = false;
+  }
+}
+
+// ---------- Dersler ----------
+async function viewCourses() {
+  const counts = {};
+  await Promise.all(S.courses.map(async c => {
+    const { count } = await sb.from('objectives').select('id', { count: 'exact', head: true }).eq('course_id', c.id);
+    counts[c.id] = count || 0;
+  }));
+  view().innerHTML = `<section class="panel">
+    <div class="head"><h2>Dersler</h2></div>
+    ${S.courses.length
+      ? `<ul class="classes courses">${S.courses.map(c => `<li><button type="button" class="cls ${S.courseView === c.id ? 'cur' : ''}" data-course="${c.id}">
+          <b>${esc(c.title)}</b>${c.book ? `<span class="muted">${esc(c.book)}</span>` : ''}
+          <span class="muted">${counts[c.id]} kazanım${c.draft ? ', taslak' : ''}</span></button></li>`).join('')}</ul>`
+      : `<p class="muted">Henüz ders yok.</p>`}
+    ${isAdmin() ? `<div class="row top-gap">
+      <button type="button" class="btn" id="rubBtn">Rubrik dosyası içe aktar</button>
+      <input type="file" id="rubIn" accept=".csv,.json" hidden>
+      <span class="muted">CSV (id ve data sütunları) veya JSON</span></div>` : ''}
+  </section>
+  <div id="courseImport"></div>
+  <div id="courseBox"></div>`;
+
+  view().querySelectorAll('[data-course]').forEach(b => {
+    b.onclick = () => {
+      S.courseView = b.dataset.course;
+      view().querySelectorAll('[data-course]').forEach(x => x.classList.toggle('cur', x === b));
+      showCourse(S.courseView);
+    };
+  });
+  if (isAdmin()) {
+    $('#rubBtn').onclick = () => $('#rubIn').click();
+    $('#rubIn').onchange = async e => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        const items = parseRubricFile(await file.text(), file.name);
+        if (!items.length) { toast('Dosyada içe aktarılacak rubrik bulunamadı.', true); return; }
+        const codes = new Set(S.courses.map(c => c.code).filter(Boolean));
+        items.forEach(x => { x.exists = !!x.code && codes.has(x.code); x.pick = !x.exists; });
+        S.coursePreview = items;
+        drawCourseImport();
+      } catch (err) {
+        toast('Dosya okunamadı: ' + err.message, true);
+      }
+    };
+  }
+  if (S.coursePreview) drawCourseImport();
+  if (S.courseView) showCourse(S.courseView);
+}
+
+async function showCourse(id) {
+  const c = S.courses.find(x => x.id === id);
+  const box = $('#courseBox');
+  if (!c || !box) return;
+  const objs = await getObjectives(id);
+  const scale = Array.isArray(c.scale) ? c.scale : [];
+  box.innerHTML = `<section class="panel">
+    <div class="head"><h2>${esc(c.title)}</h2><span class="muted">${esc(c.book || '')}</span></div>
+    ${c.note ? `<p class="muted">${esc(c.note)}</p>` : ''}
+    ${scale.length ? `<div class="scroll"><table class="list"><thead><tr><th>Puan</th><th>Düzey</th><th>Açıklama</th></tr></thead><tbody>
+      ${scale.map(s => `<tr><td>${esc(s.n)}</td><td>${esc(s.label || '')}</td><td>${esc(s.tr || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    ${groupUnits(objs).map(u => `<details class="unit"><summary>${esc(u.name || 'Ünite')} <span class="muted">(${u.items.length})</span></summary>
+      <div class="scroll"><table class="list"><thead><tr><th>Alan</th><th>Kazanım</th><th>Açıklama</th></tr></thead><tbody>
+      ${u.items.map(o => `<tr><td>${esc(o.area)}</td><td>${esc(o.label)}</td><td>${esc(o.description)}${o.example ? `<small>${esc(o.example)}</small>` : ''}</td></tr>`).join('')}
+      </tbody></table></div></details>`).join('')}
+  </section>`;
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(f); f = ''; }
+    else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; }
+    else if (c !== '\r') f += c;
+  }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+
+function parseRubricFile(text, name) {
+  text = text.replace(/^\uFEFF/, '');
+  let items;
+  if (/\.json$/i.test(name) || /^\s*[\[{]/.test(text)) {
+    const j = JSON.parse(text);
+    const arr = Array.isArray(j) ? j : [j];
+    items = arr.map(x => (x && x.units)
+      ? { code: x.code || x.id || '', data: x }
+      : { code: (x && x.id) || '', data: typeof x.data === 'string' ? JSON.parse(x.data) : x.data });
+  } else {
+    const rows = parseCSV(text);
+    const hdr = rows[0].map(h => h.trim().toLowerCase());
+    const ci = hdr.indexOf('id'), di = hdr.indexOf('data');
+    if (di < 0) throw new Error('"data" sütunu bulunamadı');
+    items = rows.slice(1).filter(r => r[di]).map(r => ({ code: ci >= 0 ? r[ci].trim() : '', data: JSON.parse(r[di]) }));
+  }
+  return items.filter(x => x.data && Array.isArray(x.data.units));
+}
+
+function drawCourseImport() {
+  const items = S.coursePreview;
+  const box = $('#courseImport');
+  if (!box || !items) return;
+  box.innerHTML = `<section class="panel">
+    <div class="head"><h2>İçe aktarılacak dersler</h2></div>
+    <ul class="objs">${items.map((x, i) => {
+      const n = x.data.units.reduce((a, u) => a + (u.objectives || []).length, 0);
+      return `<li><label class="chk"><input type="checkbox" data-ci="${i}" ${x.pick ? 'checked' : ''}>
+        <span>${esc(x.data.title || x.code)}<small>${esc(x.data.subtitle || '')}${x.data.subtitle ? ', ' : ''}${n} kazanım${x.data.draft ? ', taslak' : ''}${x.exists ? '. Bu kodla bir ders zaten var.' : ''}</small></span></label></li>`;
+    }).join('')}</ul>
+    <div class="row"><button type="button" class="btn primary" id="doCourses">Seçilenleri içe aktar</button>
+      <button type="button" class="btn ghost" id="cancelCourses">Vazgeç</button></div>
+  </section>`;
+  box.querySelectorAll('[data-ci]').forEach(cb => { cb.onchange = () => { items[Number(cb.dataset.ci)].pick = cb.checked; }; });
+  $('#cancelCourses').onclick = () => { S.coursePreview = null; box.innerHTML = ''; };
+  $('#doCourses').onclick = doCourseImport;
+}
+
+async function doCourseImport() {
+  const btn = $('#doCourses');
+  btn.disabled = true;
+  let done = 0;
+  try {
+    for (const x of S.coursePreview.filter(i => i.pick)) {
+      const d = x.data;
+      const subj = d.subject && typeof d.subject === 'object' ? d.subject : {};
+      const { data: c, error } = await sb.from('courses').insert({
+        school_id: S.schoolId, code: x.code || '', subject: subj.tr || d.group || '', subject_names: subj,
+        grade: String(d.grade ?? ''), title: d.title || x.code || 'Ders', book: d.subtitle || '', note: d.note || '',
+        scale: Array.isArray(d.scale) ? d.scale : [], draft: !!d.draft,
+      }).select('id').single();
+      if (fail(error, d.title || 'Ders')) return;
+      const objs = [];
+      let sort = 0;
+      for (const u of d.units) {
+        for (const o of (u.objectives || [])) {
+          objs.push({
+            course_id: c.id, school_id: S.schoolId, code: o.id || '', unit: u.name || '', sort: sort++,
+            area: o.area || '', label: o.label || o.desc || 'Kazanım', description: o.desc || '',
+            example: o.example || '', phrases: o.p || {},
+          });
+        }
+      }
+      for (const part of chunks(objs, 300)) {
+        const { error: e2 } = await sb.from('objectives').insert(part);
+        if (fail(e2, 'Kazanımlar')) return;
+      }
+      done++;
+    }
+    toast(`${done} ders içe aktarıldı.`);
+    S.coursePreview = null;
+    S.objCache = {};
+    await loadCourses();
+    viewCourses();
+  } finally {
+    if (btn.isConnected) btn.disabled = false;
+  }
+}
+
+// ---------- Okul (yönetici) ----------
+function memberRow(m, p, pending) {
+  const me = m.user_id === S.user.id;
+  const name = esc((p && (p.full_name || p.email)) || 'Adsız kullanıcı');
+  const mail = p && p.full_name && p.email ? `<small>${esc(p.email)}</small>` : '';
+  if (pending) {
+    return `<li><span>${name}${mail}</span><span class="row">
+      <button type="button" class="btn primary small" data-approve="${m.user_id}">Onayla</button>
+      <button type="button" class="btn ghost small" data-reject="${m.user_id}">Reddet</button></span></li>`;
+  }
+  return `<li><span>${name}${mail}</span>${me
+    ? `<span class="muted">${m.role === 'school_admin' ? 'Okul yöneticisi' : 'Öğretmen'} (sen)</span>`
+    : `<span class="row"><select data-role="${m.user_id}" aria-label="Rol">${opt('teacher', 'Öğretmen', m.role)}${opt('school_admin', 'Okul yöneticisi', m.role)}</select>
+       <button type="button" class="btn ghost small" data-remove="${m.user_id}">Okuldan çıkar</button></span>`}</li>`;
+}
+
+async function viewSchool() {
+  const sc = S.schools.find(s => s.id === S.schoolId) || {};
+  const { data: mem, error } = await sb.from('memberships').select('user_id, role, status').eq('school_id', S.schoolId);
+  if (fail(error, 'Üyeler')) return;
+  const ids = (mem || []).map(m => m.user_id);
+  let profs = [];
+  if (ids.length) {
+    const r = await sb.from('profiles').select('id, full_name, email').in('id', ids);
+    profs = r.data || [];
+  }
+  const P = Object.fromEntries(profs.map(p => [p.id, p]));
+  const pending = mem.filter(m => m.status === 'pending');
+  const active = mem.filter(m => m.status === 'active');
+  view().innerHTML = `
+  <section class="panel"><h2>Katılım kodu</h2>
+    <p>Öğretmenler hesap açtıktan sonra bu kodu girerek okula katılım ister. Onayladığın öğretmenler okulun verisini görür.</p>
+    <div class="row"><span class="code">${esc(sc.join_code || '')}</span><button type="button" class="btn" id="copyCode">Kopyala</button></div>
+  </section>
+  <section class="panel"><h2>Onay bekleyenler</h2>
+    ${pending.length ? `<ul class="members">${pending.map(m => memberRow(m, P[m.user_id], true)).join('')}</ul>` : `<p class="muted">Bekleyen istek yok.</p>`}
+  </section>
+  <section class="panel"><h2>Okul üyeleri</h2>
+    <ul class="members">${active.map(m => memberRow(m, P[m.user_id], false)).join('')}</ul>
+  </section>`;
+
+  $('#copyCode').onclick = async () => {
+    try { await navigator.clipboard.writeText(sc.join_code || ''); toast('Kod kopyalandı.'); }
+    catch (e) { toast('Kopyalanamadı, kodu elle seç.', true); }
+  };
+  const setMember = async (uid, patch, msg) => {
+    const { error: e } = await sb.from('memberships').update(patch).eq('school_id', S.schoolId).eq('user_id', uid);
+    if (fail(e, 'Üyelik')) return;
+    toast(msg);
+    viewSchool();
+  };
+  view().querySelectorAll('[data-approve]').forEach(b => { b.onclick = () => setMember(b.dataset.approve, { status: 'active' }, 'Öğretmen onaylandı.'); });
+  view().querySelectorAll('[data-reject]').forEach(b => { b.onclick = () => setMember(b.dataset.reject, { status: 'removed' }, 'İstek reddedildi.'); });
+  view().querySelectorAll('[data-remove]').forEach(b => {
+    b.onclick = () => { if (confirm('Bu kişi okuldan çıkarılsın mı?')) setMember(b.dataset.remove, { status: 'removed' }, 'Okuldan çıkarıldı.'); };
+  });
+  view().querySelectorAll('[data-role]').forEach(s => { s.onchange = () => setMember(s.dataset.role, { role: s.value }, 'Rol güncellendi.'); });
+}
+
+// ---------- Başlangıç ----------
+sb.auth.onAuthStateChange(event => {
+  if (event === 'PASSWORD_RECOVERY') setTimeout(() => renderAuth('setpass'), 0);
+  if (event === 'SIGNED_OUT') {
+    Object.assign(S, { user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null, L: null, tab: 'lessons' });
+    setTimeout(() => renderAuth('login'), 0);
+  }
+});
+
+(async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session && /type=(invite|recovery)/.test(BOOT_HASH)) return renderAuth('setpass');
+  if (!session) return renderAuth('login');
+  await afterLogin(session);
+})();
+</script>
+</body>
+</html>
