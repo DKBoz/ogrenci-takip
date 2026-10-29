@@ -163,6 +163,31 @@ table.list { width: 100%; border-collapse: collapse; font-size: .95rem; }
 .list th { color: var(--muted); font-weight: 600; }
 .list input { min-height: 38px; padding: 6px 8px; }
 
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 720px) { .grid3 { grid-template-columns: 1fr; } }
+table.grid { border-collapse: separate; border-spacing: 0; font-size: .95rem; }
+.grid th, .grid td { padding: 4px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.grid thead th { color: var(--muted); font-weight: 600; }
+.grid thead th:first-child { position: sticky; left: 0; z-index: 2; background: var(--surface); text-align: left; }
+.grid tbody th { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; font-weight: 600; padding-right: 12px; }
+.grid .no { color: var(--muted); font-weight: 400; margin-right: 6px; font-variant-numeric: tabular-nums; }
+.tog { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: pointer; font-weight: 700; color: var(--muted); }
+.tog.ok { background: var(--present-bg); color: var(--present); border-color: var(--present); }
+.tog.no { background: var(--absent-bg); color: var(--absent); border-color: var(--absent); }
+input.pt { width: 4.6em; min-height: 40px; padding: 6px; text-align: center; }
+input.pt.bad { border-color: var(--absent); outline: 2px solid var(--absent); }
+.tot { font-variant-numeric: tabular-nums; font-weight: 600; padding: 0 10px !important; }
+.legend { margin: 0; padding: 4px 12px 12px; list-style: none; display: grid; gap: 4px; }
+.legend b { display: inline-block; min-width: 2.6em; }
+table.items select { min-width: 220px; }
+.an td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.an th { white-space: normal; min-width: 7em; }
+.an tr.open > td { background: var(--soft); }
+.an .detail > td { white-space: normal; background: var(--bg); }
+.an .detail table td { white-space: normal; }
+.neg { color: var(--absent); font-weight: 700; }
+.explain { font-size: .9rem; }
+
 #toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 140%);
   background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 10px; max-width: min(92vw, 520px);
@@ -200,6 +225,7 @@ const S = {
   tab: 'lessons', year: currentYear(), classes: [], courses: [], objCache: {},
   L: null, students: [], objectives: [], recent: [],
   classView: null, courseView: null, importPreview: null, coursePreview: null, authMode: 'login',
+  X: null, AN: null,
 };
 
 // ---------- Yardımcılar ----------
@@ -238,6 +264,16 @@ function fmtDate(d) {
 }
 function titleCase(s) {
   return s.toLocaleLowerCase('tr').replace(/(^|[\s\-'’.])(\p{L})/gu, (m, a, b) => a + b.toLocaleUpperCase('tr'));
+}
+function fmtNum(n) { return Number(n).toLocaleString('tr-TR', { maximumFractionDigits: 2 }); }
+async function fetchAll(make) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await make().range(from, from + 999);
+    if (error) return { data: null, error };
+    out.push(...(data || []));
+    if (!data || data.length < 1000) return { data: out, error: null };
+  }
 }
 function chunks(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }
 
@@ -376,7 +412,7 @@ async function openSchool(id) {
   S.schoolId = id;
   S.role = (S.memberships.find(m => m.school_id === id) || {}).role;
   keep('school', id);
-  S.objCache = {}; S.L = null; S.classView = null; S.courseView = null; S.importPreview = null; S.coursePreview = null;
+  S.objCache = {}; S.L = null; S.X = null; S.AN = null; S.classView = null; S.courseView = null; S.importPreview = null; S.coursePreview = null;
   await Promise.all([loadClasses(), loadCourses()]);
   renderShell();
 }
@@ -402,7 +438,7 @@ async function getObjectives(courseId) {
 const yearClasses = () => S.classes.filter(c => c.academic_year === S.year);
 
 function renderShell() {
-  const tabs = [['lessons', 'Ders ve yoklama'], ['classes', 'Sınıflar'], ['courses', 'Dersler']];
+  const tabs = [['lessons', 'Ders ve yoklama'], ['exams', 'Sınavlar'], ['analysis', 'Analiz'], ['classes', 'Sınıflar'], ['courses', 'Dersler']];
   if (isAdmin()) tabs.push(['school', 'Okul']);
   if (!tabs.some(t => t[0] === S.tab)) S.tab = 'lessons';
   app.innerHTML = `${topBar()}
@@ -411,13 +447,15 @@ function renderShell() {
   bindTop();
   app.querySelectorAll('[data-tab]').forEach(b => {
     b.onclick = () => {
-      if (S.tab === 'lessons' && S.L && S.L.dirty && !confirm('Kaydedilmemiş yoklama değişiklikleri kaybolacak. Devam edilsin mi?')) return;
+      const dirty = (S.tab === 'lessons' && S.L && S.L.dirty) || (S.tab === 'exams' && S.X && S.X.dirty);
+      if (dirty && !confirm('Kaydedilmemiş değişiklikler kaybolacak. Devam edilsin mi?')) return;
       if (S.L) S.L.dirty = false;
+      if (S.X) S.X.dirty = false;
       S.tab = b.dataset.tab;
       renderShell();
     };
   });
-  ({ lessons: viewLessons, classes: viewClasses, courses: viewCourses, school: viewSchool })[S.tab]();
+  ({ lessons: viewLessons, exams: viewExams, analysis: viewAnalysis, classes: viewClasses, courses: viewCourses, school: viewSchool })[S.tab]();
 }
 
 // ---------- Ders ve yoklama ----------
@@ -1037,6 +1075,761 @@ async function doCourseImport() {
   }
 }
 
+// ---------- Sınavlar ----------
+const KINDS = { quiz: 'Quiz', test: 'Test', exam: 'Sınav' };
+const canEditExam = a => !!a && (a.created_by === S.user.id || isAdmin());
+
+function classesForCourse(courseId) {
+  const c = S.courses.find(x => x.id === courseId);
+  const cls = yearClasses();
+  const match = cls.filter(x => c && c.grade && x.grade === c.grade);
+  return match.length ? match : cls;
+}
+function objOptions(objs, cur) {
+  return `<option value="">Kazanım seç</option>` + groupUnits(objs).map(u =>
+    `<optgroup label="${esc(u.name || 'Ünite')}">${u.items.map(o => opt(o.id, o.label, cur)).join('')}</optgroup>`).join('');
+}
+function objLabel(id) {
+  for (const list of Object.values(S.objCache)) {
+    const o = list.find(x => x.id === id);
+    if (o) return o.label;
+  }
+  return '';
+}
+
+async function viewExams() {
+  if (S.X) {
+    if (S.X.mode === 'edit') return drawBuilder();
+    if (S.X.mode === 'import') return drawImportExam();
+    return loadResults();
+  }
+  if (!S.courses.length) {
+    view().innerHTML = empty('Henüz ders yok. Sınav oluşturmak için önce ders ve kazanımlar eklenmeli.');
+    return;
+  }
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  const [as, ac] = await Promise.all([
+    fetchAll(() => sb.from('assessments').select('id, course_id, title, kind, created_by, created_at')
+      .eq('school_id', S.schoolId).order('created_at', { ascending: false })),
+    fetchAll(() => sb.from('assessment_classes').select('assessment_id, class_id, given_on').eq('school_id', S.schoolId)),
+  ]);
+  if (fail(as.error, 'Sınavlar') || fail(ac.error, 'Sınavlar')) return;
+  const given = {};
+  ac.data.forEach(r => { (given[r.assessment_id] = given[r.assessment_id] || []).push(r); });
+  const list = as.data;
+  view().innerHTML = `<section class="panel">
+    <div class="head"><h2>Sınavlar ve quizler</h2>
+      <div class="row"><button type="button" class="btn" id="fileExam">Dosyadan oluştur</button>
+      <button type="button" class="btn primary" id="newExam">Yeni sınav oluştur</button>
+      <input type="file" id="fileExamIn" accept=".rtf" hidden></div></div>
+    ${list.length ? `<ul class="recent">${list.map(a => {
+      const c = S.courses.find(x => x.id === a.course_id);
+      const names = (given[a.id] || []).map(x => (S.classes.find(k => k.id === x.class_id) || {}).name).filter(Boolean)
+        .sort((p, q) => p.localeCompare(q, 'tr', { numeric: true }));
+      return `<li><button type="button" class="rec" data-exam="${a.id}">
+        <span>${esc(a.title)}</span>
+        <span class="muted">${KINDS[a.kind] || ''}, ${esc(c ? c.title : '')}</span>
+        <span class="miss">${names.length ? esc(names.join(', ')) : 'Henüz uygulanmadı'}</span>
+      </button></li>`;
+    }).join('')}</ul>` : `<p class="muted">Henüz sınav yok. Yeni bir sınav oluşturup her soruyu bir kazanıma bağlayabilirsin.</p>`}
+  </section>`;
+  $('#newExam').onclick = newExam;
+  $('#fileExam').onclick = () => $('#fileExamIn').click();
+  $('#fileExamIn').onchange = async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (file) startImportExam(file);
+  };
+  view().querySelectorAll('[data-exam]').forEach(b => { b.onclick = () => openExam(b.dataset.exam); });
+}
+
+function newExam() {
+  const c = S.courses.find(x => x.active) || S.courses[0];
+  S.X = { mode: 'edit', a: { id: null, course_id: c.id, title: '', kind: 'quiz', created_by: S.user.id }, items: [], removed: [], dirty: false };
+  for (let i = 0; i < 5; i++) S.X.items.push({ objective_id: '', max_points: 1 });
+  drawBuilder();
+}
+
+async function openExam(id) {
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  const [a, it] = await Promise.all([
+    sb.from('assessments').select('id, course_id, title, kind, created_by').eq('id', id).single(),
+    sb.from('assessment_items').select('id, item_no, objective_id, max_points, label').eq('assessment_id', id).order('item_no'),
+  ]);
+  if (fail(a.error, 'Sınav') || fail(it.error, 'Sorular')) return;
+  const cls = classesForCourse(a.data.course_id);
+  const last = restore('exam_' + S.schoolId, {});
+  const pick = cls.find(c => c.id === last.classId) || cls[0];
+  S.X = {
+    mode: 'results', a: a.data, items: (it.data || []).map(x => ({ ...x, max_points: Number(x.max_points) })),
+    removed: [], classId: pick ? pick.id : null, givenOn: null, students: [], cells: new Map(), orig: new Set(), saved: false, dirty: false,
+  };
+  await loadResults();
+}
+
+// Dosyadan sınav (Cambridge One RTF)
+function rtfLines(src) {
+  src = src.replace(/\{\\pict[^{}]*\}/g, '');
+  const lines = [];
+  const stack = [];
+  const SKIP = new Set(['header', 'footer', 'headerl', 'headerr', 'footerl', 'footerr', 'fonttbl', 'colortbl', 'stylesheet', 'info', 'pict', 'listtable', 'listoverridetable', 'themedata', 'datastore']);
+  let runs = [], buf = '', skipNext = 0;
+  let st = { b: false, i: false, ul: false, skip: false };
+  const flush = () => { if (buf) { if (!st.skip) runs.push({ t: buf, b: st.b, i: st.i, ul: st.ul }); buf = ''; } };
+  const endLine = () => { flush(); lines.push(runs); runs = []; };
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '{') { flush(); stack.push({ ...st }); i++; continue; }
+    if (c === '}') { flush(); st = stack.pop() || st; i++; continue; }
+    if (c === '\r' || c === '\n') { i++; continue; }
+    if (c === '\\') {
+      const n = src[i + 1];
+      if (n === '\\' || n === '{' || n === '}') { if (skipNext) skipNext--; else buf += n; i += 2; continue; }
+      if (n === "'") {
+        if (skipNext) skipNext--; else buf += String.fromCharCode(parseInt(src.substr(i + 2, 2), 16));
+        i += 4; continue;
+      }
+      if (n === '*') { st.skip = true; i += 2; continue; }
+      const m = /^\\([a-zA-Z]+)(-?\d+)? ?/.exec(src.slice(i, i + 40));
+      if (!m) { i += 2; continue; }
+      i += m[0].length;
+      const w = m[1], p = m[2];
+      if (w === 'par' || w === 'line' || w === 'sect' || w === 'page') endLine();
+      else if (w === 'tab') buf += ' ';
+      else if (w === 'b') { flush(); st.b = p !== '0'; }
+      else if (w === 'i') { flush(); st.i = p !== '0'; }
+      else if (w === 'ul') { flush(); st.ul = p !== '0'; }
+      else if (w === 'ulnone') { flush(); st.ul = false; }
+      else if (w === 'plain') { flush(); st.b = false; st.i = false; st.ul = false; }
+      else if (w === 'u') {
+        const code = Number(p);
+        buf += code === 160 ? ' ' : String.fromCharCode(code < 0 ? code + 65536 : code);
+        skipNext = 1;
+      } else if (SKIP.has(w)) { flush(); st.skip = true; }
+      continue;
+    }
+    if (skipNext) { skipNext--; i++; continue; }
+    buf += c; i++;
+  }
+  endLine();
+  return lines.map(r => ({ runs: r, text: r.map(x => x.t).join('').replace(/\s+/g, ' ').trim() })).filter(l => l.text);
+}
+
+const NUM_WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+function parseTestRtf(src) {
+  const lines = rtfLines(src);
+  const exs = [];
+  let section = '', ex = null, item = null;
+  const allBold = l => l.runs.filter(r => r.t.trim()).every(r => r.b);
+  for (const l of lines) {
+    if (allBold(l) && l.runs.some(r => r.ul) && !/^\d/.test(l.text) && l.text.length < 40) {
+      section = l.text; ex = null; item = null; continue;
+    }
+    const hm = l.text.match(/^(\d+)\.\s+(.+)$/);
+    if (allBold(l) && hm) {
+      const pm = l.text.match(/\((one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:points?|marks?)\s+each\)/i);
+      const pts = pm ? (NUM_WORDS[pm[1].toLowerCase()] || Number(pm[1])) : 1;
+      ex = { no: Number(hm[1]), section, title: hm[2].replace(/\s*\([^)]*each\)\s*$/i, '').trim(), points: pts, items: [], text: '' };
+      exs.push(ex); item = null; continue;
+    }
+    if (!ex) continue;
+    ex.text += ' ' + l.text;
+    const first = l.runs.find(r => r.t.trim());
+    const lm = first && !first.b && l.text.match(/^(\d+)\.(\s|$)/);
+    if (lm) { item = { n: Number(lm[1]), example: false }; ex.items.push(item); }
+    for (const r of l.runs) {
+      if (!lm && r.b && /^\s*\d+\s*$/.test(r.t)) { item = { n: Number(r.t.trim()), example: false }; ex.items.push(item); continue; }
+      if (r.i && r.t.trim() && item) item.example = true;
+    }
+  }
+  return exs.map(e => {
+    let items = e.items.filter((x, k, a) => a.findIndex(y => y.n === x.n) === k);
+    if (items.length && items.every(x => x.example)) items = items.map(x => ({ ...x, example: false }));
+    const scored = items.filter(x => !x.example);
+    return { ...e, items, count: scored.length, objective_id: '' };
+  });
+}
+
+const SECTION_AREAS = {
+  vocabulary: ['Kelime'], grammar: ['Dil yapısı'], 'use of english': ['Dil yapısı'],
+  listening: ['Dinleme', 'Okuma-Dinleme'], reading: ['Okuma', 'Okuma-Dinleme'],
+  writing: ['Yazma'], speaking: ['Konuşma', 'İletişim'],
+};
+const MATCH_STOP = new Set(('the and a an to of in at on for you your with then look write read listen complete sentence words word using use about this that ' +
+  'is are it i my me circle picture point each one two three four five answer question match choose correct tick draw colour color say ask ' +
+  'fill gap missing letter order put number').split(' '));
+function matchTokens(s) {
+  return String(s || '').toLowerCase().replace(/[^a-zçğıöşü' ]+/g, ' ').split(/\s+/)
+    .map(w => w.replace(/'s$/, '').replace(/(ing|es|s)$/, ''))
+    .filter(w => w.length > 2 && !MATCH_STOP.has(w));
+}
+function suggestObjective(ex, unitObjs) {
+  if (!unitObjs.length) return '';
+  const areas = SECTION_AREAS[(ex.section || '').toLowerCase()] || [];
+  const inArea = unitObjs.filter(o => areas.includes(o.area));
+  const cands = inArea.length ? inArea : unitObjs;
+  const exT = new Set(matchTokens(ex.title + ' ' + ex.text));
+  let best = null, bestScore = 0;
+  for (const o of cands) {
+    let sc = 0;
+    new Set(matchTokens(o.label + ' ' + o.example)).forEach(w => { if (exT.has(w)) sc++; });
+    if (sc > bestScore) { best = o; bestScore = sc; }
+  }
+  if (best) return best.id;
+  return inArea.length ? inArea[0].id : '';
+}
+
+async function startImportExam(file) {
+  try {
+    const src = await file.text();
+    if (!/^\s*\{\\rtf/.test(src)) { toast('Bu bir RTF dosyası değil.', true); return; }
+    const exs = parseTestRtf(src);
+    if (!exs.length) { toast('Dosyada numaralı bölüm bulunamadı. Soruları elle girmek için "Yeni sınav oluştur"u kullan.', true); return; }
+    const base = file.name.replace(/\.rtf$/i, '');
+    const um = base.match(/unit[\s_-]*(?:test[\s_-]*)?(\d+)/i);
+    const last = restore('examCourse_' + S.schoolId, null);
+    const course = S.courses.find(c => c.id === last && c.active) || S.courses.find(c => c.active) || S.courses[0];
+    S.X = {
+      mode: 'import', fileName: file.name, exs, courseId: course.id, unit: null, unitNo: um ? um[1] : null,
+      title: base.replace(/_/g, ' ').replace(/\bwith(out)?\s+answers\b/i, '').replace(/\s+/g, ' ').trim(),
+      kind: 'test', needMatch: true, answerVersion: /with[\s_-]*answers/i.test(base) && !/without/i.test(base), dirty: true,
+    };
+    drawImportExam();
+  } catch (err) {
+    toast('Dosya okunamadı: ' + err.message, true);
+  }
+}
+
+async function drawImportExam() {
+  const X = S.X;
+  const objs = await getObjectives(X.courseId);
+  const units = groupUnits(objs);
+  if (!units.some(u => u.name === X.unit)) {
+    const unitHit = X.unitNo ? units.find(u => new RegExp('\\b' + X.unitNo + '\\b').test(u.name)) : null;
+    X.unit = (unitHit || units[0] || { name: '' }).name;
+    X.needMatch = true;
+  }
+  if (X.needMatch) {
+    const unitObjs = objs.filter(o => o.unit === X.unit);
+    X.exs.forEach(e => { e.objective_id = suggestObjective(e, unitObjs); });
+    X.needMatch = false;
+  }
+  const scored = X.exs.reduce((a, e) => a + (Number(e.count) || 0), 0);
+  const examples = X.exs.reduce((a, e) => a + e.items.filter(i => i.example).length, 0);
+  view().innerHTML = `<section class="panel">
+    <div class="head"><h2>Dosyadan sınav</h2><button type="button" class="btn ghost small" id="iBack">Vazgeç</button></div>
+    <p class="muted">${esc(X.fileName)}</p>
+    ${X.answerVersion ? `<p class="note">Bu dosya cevaplı sürüm gibi görünüyor. Örnek maddeleri doğru ayırabilmem için cevapsız sürümü yüklemek daha güvenli.</p>` : ''}
+    <div class="grid3">
+      <label class="field">Ders<select id="iCourse">${S.courses.filter(c => c.active).map(c => opt(c.id, c.title, X.courseId)).join('')}</select></label>
+      <label class="field">Ünite<select id="iUnit">${units.map(u => opt(u.name, u.name || 'Ünite', X.unit)).join('')}</select></label>
+      <label class="field">Tür<select id="iKind">${Object.entries(KINDS).map(([k, l]) => opt(k, l, X.kind)).join('')}</select></label>
+    </div>
+    <label class="field">Başlık<input id="iTitle" value="${esc(X.title)}"></label>
+  </section>
+  <section class="panel">
+    <div class="head"><h2>Bölümler</h2><span class="muted">${scored} soru</span></div>
+    <p class="muted">Dosyada ${X.exs.length} bölüm bulundu.${examples ? ` Cevabı verilmiş ${examples} örnek madde puanlanmayacak.` : ''} Her bölümün kazanımını kontrol et. Kazanımlar bölüm türüne ve yönergedeki kelimelere bakılarak önerildi, emin olmadığım bölümler boş bırakıldı. Soru sayısı yanlış okunduysa düzeltebilirsin.</p>
+    <div class="scroll"><table class="list items"><thead><tr><th>Bölüm</th><th>Soru</th><th>Puan</th><th>Kazanım</th></tr></thead><tbody>
+      ${X.exs.map((e, i) => `<tr>
+        <td><b>${e.no}. ${esc(e.section)}</b><small>${esc(e.title)}</small>${e.items.some(x => x.example) ? `<small>Örnek madde: ${e.items.filter(x => x.example).map(x => x.n).join(', ')}</small>` : ''}</td>
+        <td><input type="number" class="pt" min="0" step="1" data-ei="${i}" data-k="count" value="${e.count}" aria-label="${e.no}. bölümün soru sayısı"></td>
+        <td><input type="number" class="pt" min="0.5" step="0.5" data-ei="${i}" data-k="points" value="${e.points}" aria-label="${e.no}. bölümde soru başına puan"></td>
+        <td><select data-ei="${i}" data-k="objective_id" aria-label="${e.no}. bölümün kazanımı">${objOptions(objs, e.objective_id)}</select></td>
+      </tr>`).join('')}
+    </tbody></table></div>
+  </section>
+  <div class="savebar"><button type="button" class="btn primary" id="iSave">Sınavı oluştur</button></div>`;
+
+  $('#iBack').onclick = () => { S.X = null; viewExams(); };
+  $('#iCourse').onchange = e => { X.courseId = e.target.value; X.unit = null; keep('examCourse_' + S.schoolId, X.courseId); drawImportExam(); };
+  $('#iUnit').onchange = e => { X.unit = e.target.value; X.needMatch = true; drawImportExam(); };
+  $('#iKind').onchange = e => { X.kind = e.target.value; };
+  $('#iTitle').oninput = e => { X.title = e.target.value; };
+  view().querySelectorAll('[data-ei]').forEach(el => {
+    el.onchange = () => {
+      const e = X.exs[Number(el.dataset.ei)];
+      e[el.dataset.k] = el.dataset.k === 'objective_id' ? el.value : Number(el.value);
+      if (el.dataset.k === 'count') drawImportExam();
+    };
+  });
+  $('#iSave').onclick = saveImportExam;
+}
+
+async function saveImportExam() {
+  const X = S.X;
+  if (!X.title.trim()) { toast('Sınava bir başlık ver.', true); return; }
+  const used = X.exs.filter(e => Number(e.count) > 0);
+  if (!used.length) { toast('Puanlanacak soru yok.', true); return; }
+  const missing = used.find(e => !e.objective_id);
+  if (missing) { toast(`${missing.no}. bölüm için bir kazanım seç.`, true); return; }
+  if (used.some(e => !(Number(e.points) > 0))) { toast('Soru puanları sıfırdan büyük olmalı.', true); return; }
+  const items = [];
+  used.forEach(e => {
+    const nums = e.items.filter(x => !x.example).map(x => x.n);
+    let next = Math.max(0, ...e.items.map(x => x.n));
+    for (let k = 0; k < Number(e.count); k++) {
+      const n = k < nums.length ? nums[k] : ++next;
+      items.push({ objective_id: e.objective_id, max_points: Number(e.points), label: `${e.no}.${n}` });
+    }
+  });
+  const btn = $('#iSave');
+  btn.disabled = true;
+  try {
+    const { data, error } = await sb.from('assessments').insert({
+      school_id: S.schoolId, course_id: X.courseId, title: X.title.trim(), kind: X.kind, source: X.fileName,
+    }).select('id').single();
+    if (fail(error, 'Sınav kaydedilemedi')) return;
+    const { error: e2 } = await sb.from('assessment_items').insert(items.map((it, i) => ({
+      school_id: S.schoolId, assessment_id: data.id, item_no: i + 1, objective_id: it.objective_id, max_points: it.max_points, label: it.label,
+    })));
+    if (fail(e2, 'Sorular kaydedilemedi')) return;
+    keep('examCourse_' + S.schoolId, X.courseId);
+    toast(`Sınav oluşturuldu: ${items.length} soru. Şimdi sonuçları girebilirsin.`);
+    await openExam(data.id);
+  } finally {
+    const b = $('#iSave');
+    if (b) b.disabled = false;
+  }
+}
+
+// Soru düzenleme
+async function drawBuilder() {
+  const X = S.X, a = X.a;
+  const objs = await getObjectives(a.course_id);
+  const sum = X.items.reduce((s, i) => s + (Number(i.max_points) || 0), 0);
+  view().innerHTML = `<section class="panel">
+    <div class="head"><h2>${a.id ? 'Soruları düzenle' : 'Yeni sınav'}</h2>
+      <button type="button" class="btn ghost small" id="xBack">${a.id ? 'Sonuçlara dön' : 'Vazgeç'}</button></div>
+    <div class="grid3">
+      <label class="field">Ders<select id="xCourse" ${a.id ? 'disabled' : ''}>${S.courses.filter(c => c.active || c.id === a.course_id).map(c => opt(c.id, c.title, a.course_id)).join('')}</select></label>
+      <label class="field">Başlık<input id="xTitle" value="${esc(a.title)}" placeholder="Örneğin Unit 3 quiz"></label>
+      <label class="field">Tür<select id="xKind">${Object.entries(KINDS).map(([k, l]) => opt(k, l, a.kind)).join('')}</select></label>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="head"><h2>Sorular</h2><span class="muted">${X.items.length} soru, toplam ${fmtNum(sum)} puan</span></div>
+    <p class="muted">Her soruyu ölçtüğü kazanıma bağla. Tek puanlık sorularda sonuç girerken doğru ve yanlışı dokunarak işaretlersin.</p>
+    <div class="scroll"><table class="list items"><thead><tr><th>Soru</th><th>Kazanım</th><th>Puan</th><th></th></tr></thead><tbody>
+      ${X.items.map((it, i) => `<tr>
+        <td>${esc(it.label || String(i + 1))}</td>
+        <td><select data-ii="${i}" data-k="objective_id" aria-label="${i + 1}. sorunun kazanımı">${objOptions(objs, it.objective_id)}</select></td>
+        <td><input type="number" class="pt" min="0.5" step="0.5" data-ii="${i}" data-k="max_points" value="${it.max_points}" aria-label="${i + 1}. sorunun puanı"></td>
+        <td><button type="button" class="btn quiet small" data-del="${i}" aria-label="${i + 1}. soruyu sil">Sil</button></td>
+      </tr>`).join('')}
+    </tbody></table></div>
+    <div class="row"><button type="button" class="btn" id="xAdd1">Soru ekle</button><button type="button" class="btn ghost" id="xAdd5">5 soru ekle</button></div>
+  </section>
+  <div class="savebar"><button type="button" class="btn primary" id="xSave">${a.id ? 'Değişiklikleri kaydet' : 'Sınavı oluştur'}</button></div>`;
+
+  $('#xBack').onclick = () => {
+    if (X.dirty && !confirm('Kaydedilmemiş değişiklikler kaybolacak. Devam edilsin mi?')) return;
+    if (a.id) openExam(a.id); else { S.X = null; viewExams(); }
+  };
+  $('#xCourse').onchange = e => { a.course_id = e.target.value; X.items.forEach(i => { i.objective_id = ''; }); X.dirty = true; drawBuilder(); };
+  $('#xTitle').oninput = e => { a.title = e.target.value; X.dirty = true; };
+  $('#xKind').onchange = e => { a.kind = e.target.value; X.dirty = true; };
+  view().querySelectorAll('[data-ii]').forEach(el => {
+    el.onchange = () => {
+      const it = X.items[Number(el.dataset.ii)];
+      it[el.dataset.k] = el.dataset.k === 'max_points' ? Number(el.value) : el.value;
+      X.dirty = true;
+      if (el.dataset.k === 'max_points') drawBuilder();
+    };
+  });
+  view().querySelectorAll('[data-del]').forEach(b => {
+    b.onclick = () => {
+      const i = Number(b.dataset.del), it = X.items[i];
+      if (it.id) {
+        if (!confirm('Bu soru silinirse girilmiş puanları da silinir. Devam edilsin mi?')) return;
+        X.removed.push(it.id);
+      }
+      X.items.splice(i, 1);
+      X.dirty = true;
+      drawBuilder();
+    };
+  });
+  const addItems = n => {
+    const last = X.items[X.items.length - 1];
+    for (let k = 0; k < n; k++) X.items.push({ objective_id: last ? last.objective_id : '', max_points: last ? last.max_points : 1 });
+    X.dirty = true;
+    drawBuilder();
+  };
+  $('#xAdd1').onclick = () => addItems(1);
+  $('#xAdd5').onclick = () => addItems(5);
+  $('#xSave').onclick = saveExam;
+}
+
+async function saveExam() {
+  const X = S.X, a = X.a;
+  if (!a.title.trim()) { toast('Sınava bir başlık ver.', true); return; }
+  if (!X.items.length) { toast('En az bir soru ekle.', true); return; }
+  if (X.items.some(i => !i.objective_id)) { toast('Her soruya bir kazanım seç.', true); return; }
+  if (X.items.some(i => !(Number(i.max_points) > 0))) { toast('Soru puanları sıfırdan büyük olmalı.', true); return; }
+  const btn = $('#xSave');
+  btn.disabled = true;
+  try {
+    let id = a.id;
+    if (!id) {
+      const { data, error } = await sb.from('assessments')
+        .insert({ school_id: S.schoolId, course_id: a.course_id, title: a.title.trim(), kind: a.kind }).select('id').single();
+      if (fail(error, 'Sınav kaydedilemedi')) return;
+      id = data.id;
+      const { error: e2 } = await sb.from('assessment_items').insert(X.items.map((it, i) => ({
+        school_id: S.schoolId, assessment_id: id, item_no: i + 1, objective_id: it.objective_id, max_points: Number(it.max_points), label: it.label || '',
+      })));
+      if (fail(e2, 'Sorular kaydedilemedi')) return;
+    } else {
+      const { error } = await sb.from('assessments').update({ title: a.title.trim(), kind: a.kind }).eq('id', id);
+      if (fail(error, 'Sınav kaydedilemedi')) return;
+      if (X.removed.length) {
+        const { error: e2 } = await sb.from('assessment_items').delete().in('id', X.removed);
+        if (fail(e2, 'Sorular silinemedi')) return;
+      }
+      let next = Math.max(0, ...X.items.filter(i => i.item_no).map(i => i.item_no));
+      const fresh = [];
+      for (const it of X.items) {
+        if (it.id) {
+          const { error: e3 } = await sb.from('assessment_items')
+            .update({ objective_id: it.objective_id, max_points: Number(it.max_points) }).eq('id', it.id);
+          if (fail(e3, 'Sorular kaydedilemedi')) return;
+        } else {
+          fresh.push({ school_id: S.schoolId, assessment_id: id, item_no: ++next, objective_id: it.objective_id, max_points: Number(it.max_points) });
+        }
+      }
+      if (fresh.length) {
+        const { error: e4 } = await sb.from('assessment_items').insert(fresh);
+        if (fail(e4, 'Sorular kaydedilemedi')) return;
+      }
+    }
+    X.dirty = false;
+    toast(a.id ? 'Sınav güncellendi.' : 'Sınav oluşturuldu. Şimdi sonuçları girebilirsin.');
+    await openExam(id);
+  } finally {
+    const b = $('#xSave');
+    if (b) b.disabled = false;
+  }
+}
+
+// Sonuç girişi
+async function loadResults() {
+  const X = S.X;
+  await getObjectives(X.a.course_id);
+  if (!X.classId) { drawResults(); return; }
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  const [st, ac] = await Promise.all([
+    sb.from('students').select('id, full_name, school_no').eq('class_id', X.classId).eq('active', true),
+    sb.from('assessment_classes').select('given_on').eq('assessment_id', X.a.id).eq('class_id', X.classId).maybeSingle(),
+  ]);
+  if (fail(st.error, 'Öğrenciler') || fail(ac.error, 'Sınav')) return;
+  X.students = (st.data || []).sort(byNo);
+  X.saved = !!ac.data;
+  X.givenOn = ac.data ? ac.data.given_on : today();
+  X.cells = new Map();
+  X.orig = new Set();
+  const itemIds = X.items.map(i => i.id);
+  if (itemIds.length && X.students.length) {
+    const { data, error } = await fetchAll(() => sb.from('item_results').select('item_id, student_id, points')
+      .in('item_id', itemIds).in('student_id', X.students.map(s => s.id)));
+    if (fail(error, 'Sonuçlar')) return;
+    data.forEach(r => {
+      const k = r.student_id + '|' + r.item_id;
+      X.cells.set(k, String(Number(r.points)));
+      X.orig.add(k);
+    });
+  }
+  X.dirty = false;
+  keep('exam_' + S.schoolId, { classId: X.classId });
+  drawResults();
+}
+
+function cellHtml(s, it, i) {
+  const k = s.id + '|' + it.id;
+  const v = S.X.cells.get(k) ?? '';
+  if (Number(it.max_points) === 1) {
+    const cls = v === '1' ? 'ok' : v === '0' ? 'no' : '';
+    const mark = v === '1' ? '✓' : v === '0' ? '✗' : '·';
+    const word = v === '1' ? 'doğru' : v === '0' ? 'yanlış' : 'boş';
+    return `<td><button type="button" class="tog ${cls}" data-k="${k}" aria-label="${esc(s.full_name)}, ${esc(it.label || String(i + 1))}. soru: ${word}">${mark}</button></td>`;
+  }
+  return `<td><input class="pt" type="number" inputmode="decimal" min="0" max="${it.max_points}" step="0.5" data-k="${k}" value="${esc(v)}" aria-label="${esc(s.full_name)}, ${i + 1}. soru"></td>`;
+}
+function rowTotal(sid) {
+  const X = S.X;
+  let got = 0, any = false;
+  const total = X.items.reduce((a, i) => a + i.max_points, 0);
+  X.items.forEach(it => {
+    const v = X.cells.get(sid + '|' + it.id);
+    if (v !== undefined && v !== '' && !isNaN(Number(v))) { any = true; got += Number(v); }
+  });
+  return any ? `${fmtNum(got)}/${fmtNum(total)}` : '–';
+}
+function resRow(s) {
+  return `<tr data-row="${s.id}">
+    <th scope="row"><span class="no">${esc(s.school_no || '')}</span>${esc(s.full_name)}</th>
+    ${S.X.items.map((it, i) => cellHtml(s, it, i)).join('')}
+    <td class="tot" data-tot="${s.id}">${rowTotal(s.id)}</td>
+    <td><button type="button" class="btn quiet small" data-fill="${s.id}">Kalanlar tam</button></td>
+  </tr>`;
+}
+
+function drawResults() {
+  const X = S.X, a = X.a;
+  const c = S.courses.find(x => x.id === a.course_id);
+  const cls = classesForCourse(a.course_id);
+  const total = X.items.reduce((s, i) => s + i.max_points, 0);
+  view().innerHTML = `
+  <section class="panel">
+    <div class="head"><h2>${esc(a.title)}</h2><button type="button" class="btn ghost small" id="rBack">Tüm sınavlar</button></div>
+    <p class="muted">${KINDS[a.kind] || ''}, ${esc(c ? c.title : '')}, ${X.items.length} soru, toplam ${fmtNum(total)} puan</p>
+    ${canEditExam(a) ? `<div class="row"><button type="button" class="btn small" id="rEdit">Soruları düzenle</button>
+      <button type="button" class="btn quiet small" id="rDel">Sınavı sil</button></div>` : ''}
+    <details class="unit"><summary>Sorular ve kazanımlar</summary>
+      <ul class="legend">${X.items.map((it, i) => `<li><b>${esc(it.label || String(i + 1))}</b> ${esc(objLabel(it.objective_id))} <span class="muted">(${fmtNum(it.max_points)} puan)</span></li>`).join('')}</ul>
+    </details>
+  </section>
+  ${!cls.length ? empty(`${S.year} eğitim yılı için sınıf yok.`) : `
+  <section class="panel">
+    <div class="grid3">
+      <label class="field">Sınıf<select id="rClass">${cls.map(k => opt(k.id, k.name, X.classId)).join('')}</select></label>
+      <label class="field">Uygulama tarihi<input id="rDate" type="date" value="${X.givenOn || today()}"></label>
+    </div>
+    <p class="state ${X.saved ? 'saved' : ''}">${X.saved ? 'Bu sınıfın sonuçları kayıtlı.' : 'Bu sınıf için henüz sonuç girilmedi.'}</p>
+    <p class="muted hint">Tek puanlık sorularda hücreye dokundukça doğru, yanlış ve boş arasında geçiş yapılır. Sınava girmeyen öğrencinin satırını boş bırak.</p>
+    ${X.students.length ? `<div class="scroll"><table class="grid" id="rGrid"><thead><tr><th>Öğrenci</th>
+      ${X.items.map((it, i) => `<th title="${esc(objLabel(it.objective_id))}">${esc(it.label || String(i + 1))}</th>`).join('')}<th>Toplam</th><th></th></tr></thead>
+      <tbody>${X.students.map(resRow).join('')}</tbody></table></div>` : `<p class="muted">Bu sınıfta öğrenci yok.</p>`}
+  </section>
+  <div class="savebar"><button type="button" class="btn primary" id="rSave">Sonuçları kaydet</button></div>`}`;
+
+  const guardX = (go, revert) => {
+    if (X.dirty && !confirm('Kaydedilmemiş sonuçlar kaybolacak. Devam edilsin mi?')) { if (revert) revert(); return; }
+    X.dirty = false;
+    go();
+  };
+  $('#rBack').onclick = () => guardX(() => { S.X = null; viewExams(); });
+  const ed = $('#rEdit');
+  if (ed) ed.onclick = () => guardX(() => { X.mode = 'edit'; X.removed = []; drawBuilder(); });
+  const del = $('#rDel');
+  if (del) del.onclick = async () => {
+    if (!confirm('Bu sınav, soruları ve tüm sınıfların sonuçları silinsin mi?')) return;
+    const { error } = await sb.from('assessments').delete().eq('id', a.id);
+    if (fail(error, 'Sınav silinemedi')) return;
+    toast('Sınav silindi.');
+    S.X = null;
+    viewExams();
+  };
+  if (!cls.length) return;
+  $('#rClass').onchange = e => guardX(() => { X.classId = e.target.value; loadResults(); }, () => { e.target.value = X.classId; });
+  $('#rDate').onchange = e => { X.givenOn = e.target.value; X.dirty = true; };
+  $('#rSave').onclick = saveResults;
+  const grid = $('#rGrid');
+  if (!grid) return;
+  const refreshTotal = sid => { const t = grid.querySelector(`[data-tot="${sid}"]`); if (t) t.textContent = rowTotal(sid); };
+  grid.onclick = e => {
+    const tog = e.target.closest('.tog');
+    if (tog) {
+      const k = tog.dataset.k;
+      const v = X.cells.get(k) ?? '';
+      const next = v === '' ? '1' : v === '1' ? '0' : '';
+      X.cells.set(k, next);
+      tog.className = 'tog' + (next === '1' ? ' ok' : next === '0' ? ' no' : '');
+      tog.textContent = next === '1' ? '✓' : next === '0' ? '✗' : '·';
+      tog.setAttribute('aria-label', tog.getAttribute('aria-label').replace(/: \S+$/, ': ' + (next === '1' ? 'doğru' : next === '0' ? 'yanlış' : 'boş')));
+      X.dirty = true;
+      refreshTotal(k.split('|')[0]);
+      return;
+    }
+    const fill = e.target.closest('[data-fill]');
+    if (fill) {
+      const sid = fill.dataset.fill;
+      X.items.forEach(it => {
+        const k = sid + '|' + it.id;
+        if ((X.cells.get(k) ?? '') === '') X.cells.set(k, String(it.max_points));
+      });
+      X.dirty = true;
+      const s = X.students.find(x => x.id === sid);
+      const tr = grid.querySelector(`[data-row="${sid}"]`);
+      if (s && tr) tr.outerHTML = resRow(s);
+    }
+  };
+  grid.oninput = e => {
+    const inp = e.target.closest('input.pt');
+    if (!inp) return;
+    const k = inp.dataset.k;
+    const v = inp.value.trim();
+    X.cells.set(k, v);
+    const max = Number(inp.max);
+    inp.classList.toggle('bad', v !== '' && (isNaN(Number(v)) || Number(v) < 0 || Number(v) > max));
+    X.dirty = true;
+    refreshTotal(k.split('|')[0]);
+  };
+}
+
+async function saveResults() {
+  const X = S.X;
+  const rows = [], cleared = new Map();
+  for (const s of X.students) {
+    for (const it of X.items) {
+      const k = s.id + '|' + it.id;
+      const v = (X.cells.get(k) ?? '').trim();
+      if (v !== '') {
+        const n = Number(v);
+        if (isNaN(n) || n < 0 || n > it.max_points) {
+          toast(`${s.full_name}: ${it.label || X.items.indexOf(it) + 1} numaralı soruya en fazla ${fmtNum(it.max_points)} puan verilebilir.`, true);
+          return;
+        }
+        rows.push({ item_id: it.id, student_id: s.id, school_id: S.schoolId, points: n });
+      } else if (X.orig.has(k)) {
+        if (!cleared.has(s.id)) cleared.set(s.id, []);
+        cleared.get(s.id).push(it.id);
+      }
+    }
+  }
+  if (!X.givenOn) { toast('Uygulama tarihini seç.', true); return; }
+  const btn = $('#rSave');
+  btn.disabled = true;
+  try {
+    const { error } = await sb.from('assessment_classes').upsert(
+      { assessment_id: X.a.id, class_id: X.classId, school_id: S.schoolId, given_on: X.givenOn },
+      { onConflict: 'assessment_id,class_id' });
+    if (fail(error, 'Sınav tarihi')) return;
+    for (const part of chunks(rows, 500)) {
+      const { error: e2 } = await sb.from('item_results').upsert(part, { onConflict: 'item_id,student_id' });
+      if (fail(e2, 'Sonuçlar')) return;
+    }
+    for (const [sid, iids] of cleared) {
+      const { error: e3 } = await sb.from('item_results').delete().eq('student_id', sid).in('item_id', iids);
+      if (fail(e3, 'Sonuçlar')) return;
+    }
+    X.dirty = false;
+    toast('Sonuçlar kaydedildi.');
+    await loadResults();
+  } finally {
+    const b = $('#rSave');
+    if (b) b.disabled = false;
+  }
+}
+
+// ---------- Analiz ----------
+const mean = arr => arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length : null;
+const pctTxt = v => v == null ? '–' : Math.round(v * 100) + '%';
+const gapTxt = v => v == null ? '–' : (v > 0 ? '+' : '') + String(Math.round(v * 100)).replace('-', '−');
+
+async function viewAnalysis() {
+  const cls = yearClasses();
+  if (!cls.length || !S.courses.length) {
+    view().innerHTML = empty('Analiz için önce sınıf listesi ve dersler eklenmeli.');
+    return;
+  }
+  if (!S.AN || !cls.some(c => c.id === S.AN.classId)) {
+    const last = restore('an_' + S.schoolId, {});
+    const classId = (cls.find(c => c.id === last.classId) || cls[0]).id;
+    S.AN = { classId, courseId: pickCourse(classId, last.courseId), open: null, d: null };
+  }
+  await loadAnalysis();
+}
+
+async function loadAnalysis() {
+  const AN = S.AN;
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  if (!AN.courseId) { AN.d = null; drawAnalysis(); return; }
+  const [rowsR, st, ls] = await Promise.all([
+    fetchAll(() => sb.from('objective_absence_compare')
+      .select('student_id, objective_id, pct, max_total, lessons_taught, lessons_missed, present_avg, present_n')
+      .eq('class_id', AN.classId).eq('course_id', AN.courseId)),
+    sb.from('students').select('id, full_name, school_no').eq('class_id', AN.classId).eq('active', true),
+    fetchAll(() => sb.from('lessons').select('id').eq('class_id', AN.classId).eq('course_id', AN.courseId)),
+  ]);
+  if (fail(rowsR.error, 'Analiz') || fail(st.error, 'Öğrenciler') || fail(ls.error, 'Dersler')) return;
+  const lessonIds = ls.data.map(l => l.id);
+  const att = {};
+  for (const part of chunks(lessonIds, 150)) {
+    const { data, error } = await fetchAll(() => sb.from('attendance').select('student_id, status').in('lesson_id', part).neq('status', 'present'));
+    if (fail(error, 'Yoklama')) return;
+    data.forEach(r => {
+      att[r.student_id] = att[r.student_id] || { absent: 0, late: 0, excused: 0 };
+      att[r.student_id][r.status]++;
+    });
+  }
+  await getObjectives(AN.courseId);
+  const rows = rowsR.data.map(r => ({
+    ...r, pct: Number(r.pct), present_avg: r.present_avg == null ? null : Number(r.present_avg),
+    lessons_taught: Number(r.lessons_taught), lessons_missed: Number(r.lessons_missed),
+  }));
+  const per = (st.data || []).map(s => {
+    const mine = rows.filter(r => r.student_id === s.id);
+    const missed = mine.filter(r => r.lessons_missed > 0);
+    const attended = mine.filter(r => r.lessons_missed === 0 && r.lessons_taught > 0);
+    const peers = missed.filter(r => r.present_avg != null);
+    const a = att[s.id] || { absent: 0, late: 0, excused: 0 };
+    const mMiss = mean(missed.map(r => r.pct));
+    const mPeers = mean(peers.map(r => r.present_avg));
+    return {
+      s, missed, absent: a.absent + a.excused, late: a.late,
+      mMiss, mAtt: mean(attended.map(r => r.pct)), mPeers,
+      gap: mMiss != null && mPeers != null ? mean(peers.map(r => r.pct)) - mPeers : null,
+    };
+  });
+  per.sort((p, q) => {
+    if (p.gap != null && q.gap != null) return p.gap - q.gap;
+    if (p.gap != null) return -1;
+    if (q.gap != null) return 1;
+    return byNo(p.s, q.s);
+  });
+  AN.d = { per, lessonCount: lessonIds.length, testedObj: new Set(rows.map(r => r.objective_id)).size, rowCount: rows.length };
+  keep('an_' + S.schoolId, { classId: AN.classId, courseId: AN.courseId });
+  drawAnalysis();
+}
+
+function drawAnalysis() {
+  const AN = S.AN, d = AN.d;
+  const head = `<section class="panel">
+    <div class="grid3">
+      <label class="field">Sınıf<select id="aClass">${yearClasses().map(c => opt(c.id, c.name, AN.classId)).join('')}</select></label>
+      <label class="field">Ders<select id="aCourse">${coursesFor(AN.classId).map(c => opt(c.id, c.title, AN.courseId)).join('')}</select></label>
+    </div>
+    ${d ? `<p class="muted">Bu sınıfta bu derse ait ${d.lessonCount} ders kaydı var, ${d.testedObj} kazanımda sınav sonucu girilmiş.</p>` : ''}
+  </section>`;
+  let body;
+  if (!d || !d.rowCount) {
+    body = empty('Analiz için ders kayıtlarında işlenen kazanımların işaretlenmesi ve bu kazanımları ölçen sınav sonuçlarının girilmesi gerekir. Veri girildikçe tablo burada oluşur.');
+  } else {
+    body = `<section class="panel">
+      <h2>Devamsızlık ve kazanım başarısı</h2>
+      <p class="muted explain">Her öğrencinin, derse girmediği günlerde işlenen kazanımlardaki sınav başarısı, katıldığı derslerin kazanımlarındaki başarısıyla ve aynı kazanımlarda o derslere katılan sınıf arkadaşlarının ortalamasıyla karşılaştırılır. Fark sütunu, öğrencinin bu kazanımlardaki başarısının derse katılanların ortalamasından kaç yüzde puan uzak olduğunu gösterir. Ayrıntı için öğrencinin adına dokun.</p>
+      <div class="scroll"><table class="list an"><thead><tr>
+        <th>Öğrenci</th><th>Devamsızlık</th><th>Kaçırdığı derslerin kazanımları</th><th>Katıldığı derslerin kazanımları</th><th>Aynı kazanımlarda derse katılanlar</th><th>Fark (yüzde puan)</th>
+      </tr></thead><tbody>
+      ${d.per.map(p => {
+        const open = AN.open === p.s.id;
+        let detail = '';
+        if (open) {
+          detail = `<tr class="detail"><td colspan="6">${p.missed.length ? `<table class="list"><thead><tr><th>Kaçırdığı derste işlenen kazanım</th><th>İşlendiği ders</th><th>Kaçırdığı</th><th>Başarısı</th><th>Katılanların ortalaması</th></tr></thead><tbody>
+            ${p.missed.map(r => `<tr><td>${esc(objLabel(r.objective_id))}</td><td>${r.lessons_taught}</td><td>${r.lessons_missed}</td><td>${pctTxt(r.pct)}</td>
+              <td>${r.present_avg == null ? '–' : pctTxt(r.present_avg) + ` <span class="muted">(${r.present_n} öğrenci)</span>`}</td></tr>`).join('')}
+            </tbody></table>` : `<p class="muted">Kaçırdığı derslerde işlenip sınavla ölçülen bir kazanım yok.</p>`}</td></tr>`;
+        }
+        return `<tr class="${open ? 'open' : ''}">
+          <td><button type="button" class="link" data-st="${p.s.id}">${esc(p.s.full_name)}</button></td>
+          <td>${p.absent} ders${p.late ? `, ${p.late} geç` : ''}</td>
+          <td>${pctTxt(p.mMiss)}</td><td>${pctTxt(p.mAtt)}</td><td>${pctTxt(p.mPeers)}</td>
+          <td class="${p.gap != null && p.gap < 0 ? 'neg' : ''}">${gapTxt(p.gap)}</td>
+        </tr>${detail}`;
+      }).join('')}
+      </tbody></table></div>
+      <p class="muted explain">Bu tablo bir eğilim gösterir, kesin bir sonuç değildir. Kazanım başına soru sayısı azsa tek bir sınav sonucu tabloyu çok etkiler. Devamsızlığın nedeni, örneğin bir hastalık, sonraki haftalardaki başarıyı da etkileyebilir.</p>
+    </section>`;
+  }
+  view().innerHTML = head + body;
+  $('#aClass').onchange = e => { AN.classId = e.target.value; AN.courseId = pickCourse(AN.classId, AN.courseId); AN.open = null; loadAnalysis(); };
+  $('#aCourse').onchange = e => { AN.courseId = e.target.value; AN.open = null; loadAnalysis(); };
+  view().querySelectorAll('[data-st]').forEach(b => {
+    b.onclick = () => { AN.open = AN.open === b.dataset.st ? null : b.dataset.st; drawAnalysis(); };
+  });
+}
+
 // ---------- Okul (yönetici) ----------
 function memberRow(m, p, pending) {
   const me = m.user_id === S.user.id;
@@ -1100,7 +1893,7 @@ async function viewSchool() {
 sb.auth.onAuthStateChange(event => {
   if (event === 'PASSWORD_RECOVERY') setTimeout(() => renderAuth('setpass'), 0);
   if (event === 'SIGNED_OUT') {
-    Object.assign(S, { user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null, L: null, tab: 'lessons' });
+    Object.assign(S, { user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null, L: null, X: null, AN: null, tab: 'lessons' });
     setTimeout(() => renderAuth('login'), 0);
   }
 });
