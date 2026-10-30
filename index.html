@@ -155,6 +155,8 @@ input, select {
 .plain .no { color: var(--muted); font-variant-numeric: tabular-nums; }
 .members li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .members select { width: auto; }
+select.move { width: auto; min-height: 36px; padding: 4px 8px; font-size: .9rem; }
+.plain .row { flex-wrap: nowrap; }
 .code { font-size: 1.4rem; font-weight: 700; letter-spacing: .12em; padding: 6px 14px; background: var(--soft); border-radius: 8px; }
 
 .scroll { overflow-x: auto; }
@@ -202,8 +204,8 @@ table.items select { min-width: 220px; }
 <div id="app"><p class="pad muted">Yükleniyor…</p></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 <script>
 // ===== Ayarlar: Supabase projesinin adresi ve publishable anahtarı =====
 const SUPABASE_URL = 'https://ixqeazpoerbpryrvamkr.supabase.co';
@@ -211,6 +213,7 @@ const SUPABASE_KEY = 'sb_publishable_KnM1ZYjZZ6xsMnnyIE41IA_hwYE-wCv';
 // ========================================================================
 
 const BOOT_HASH = location.hash;
+const IDLE_MINUTES = 60; // bu kadar dakika işlem yapılmazsa otomatik çıkış
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const STATUS = {
@@ -289,7 +292,7 @@ function renderAuth(mode, msg) {
     <form id="authForm" class="stack">
       ${mode === 'signup' || mode === 'setpass' ? `<label class="field">Ad soyad<input name="full_name" autocomplete="name" ${mode === 'signup' ? 'required' : ''}></label>` : ''}
       ${mode !== 'setpass' ? `<label class="field">E-posta<input name="email" type="email" autocomplete="email" required></label>` : ''}
-      ${mode !== 'forgot' ? `<label class="field">${mode === 'setpass' ? 'Yeni şifre' : 'Şifre'}<input name="password" type="password" minlength="6" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" required></label>` : ''}
+      ${mode !== 'forgot' ? `<label class="field">${mode === 'setpass' ? 'Yeni şifre' : 'Şifre'}<input name="password" type="password" minlength="${mode === 'login' ? 6 : 8}" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" required></label>` : ''}
       <button class="btn primary" type="submit">${actions[mode]}</button>
     </form>
     <div class="auth-links">
@@ -318,6 +321,8 @@ async function onAuthSubmit(e) {
     if (mode === 'login') {
       const { data, error } = await sb.auth.signInWithPassword({ email: f.email.trim(), password: f.password });
       if (error) return renderAuth('login', loginError(error));
+      markActive.last = 0;
+      markActive();
       await afterLogin(data.session);
     } else if (mode === 'signup') {
       const { data, error } = await sb.auth.signUp({
@@ -774,7 +779,9 @@ async function showClass(id) {
   box.innerHTML = `<section class="panel">
     <div class="head"><h2>${esc(c.name)}</h2><span class="muted">${st.length} öğrenci${c.grade ? ', düzey ' + esc(c.grade) : ''}</span></div>
     ${st.length ? `<ol class="plain">${st.map(s => `<li><span class="no">${esc(s.school_no || '')}</span><span>${esc(s.full_name)}</span>
-      ${isAdmin() ? `<button type="button" class="btn quiet small" data-off="${s.id}">Listeden çıkar</button>` : '<span></span>'}</li>`).join('')}</ol>`
+      ${isAdmin() ? `<span class="row"><select class="move" data-move="${s.id}" aria-label="${esc(s.full_name)} için sınıf">
+        ${yearClasses().map(k => opt(k.id, k.id === id ? 'Sınıf: ' + k.name : k.name + ' sınıfına taşı', id)).join('')}</select>
+        <button type="button" class="btn quiet small" data-off="${s.id}">Listeden çıkar</button></span>` : '<span></span>'}</li>`).join('')}</ol>`
       : `<p class="muted">Bu sınıfta öğrenci yok.</p>`}
     <form id="addStu" class="row top-gap">
       <input name="school_no" class="w-no" placeholder="Okul no" inputmode="numeric">
@@ -788,11 +795,24 @@ async function showClass(id) {
     const { error } = await sb.from('students').insert({
       school_id: S.schoolId, class_id: id, school_no: f.school_no.trim() || null, full_name: titleCase(f.full_name.trim()),
     });
-    if (error && error.code === '23505') { toast('Bu okul numarası başka bir öğrencide kayıtlı.', true); return; }
+    if (error && error.code === '23505') { await handleDuplicateNo(f.school_no.trim(), id); return; }
     if (fail(error, 'Öğrenci eklenemedi')) return;
     toast('Öğrenci eklendi.');
     showClass(id);
   };
+  box.querySelectorAll('[data-move]').forEach(sel => {
+    sel.onchange = async () => {
+      const target = S.classes.find(k => k.id === sel.value);
+      const s = st.find(x => x.id === sel.dataset.move);
+      if (!target || target.id === id) return;
+      if (!confirm(`${s.full_name}, ${target.name} sınıfına taşınsın mı? Geçmiş yoklama ve sınav kayıtları korunur.`)) { sel.value = id; return; }
+      const { error } = await sb.from('students').update({ class_id: target.id }).eq('id', s.id);
+      if (fail(error, 'Öğrenci taşınamadı')) { sel.value = id; return; }
+      toast(`${s.full_name}, ${target.name} sınıfına taşındı.`);
+      await loadClasses();
+      viewClasses();
+    };
+  });
   box.querySelectorAll('[data-off]').forEach(b => {
     b.onclick = async () => {
       if (!confirm('Öğrenci listeden çıkarılsın mı? Kayıtları silinmez.')) return;
@@ -803,8 +823,27 @@ async function showClass(id) {
   });
 }
 
+function classKey(s) {
+  return String(s).toLocaleUpperCase('tr').replace(/[^0-9A-ZÇĞİÖŞÜ]/g, '');
+}
+async function handleDuplicateNo(no, classId) {
+  const target = S.classes.find(k => k.id === classId);
+  const { data } = await sb.from('students').select('id, full_name, class_id, active').eq('school_id', S.schoolId).eq('school_no', no).maybeSingle();
+  if (!data) { toast('Bu okul numarası başka bir öğrencide kayıtlı.', true); return; }
+  const cur = S.classes.find(k => k.id === data.class_id);
+  const where = data.active ? `${cur ? cur.name + ' sınıfındaki ' : ''}${data.full_name} adlı öğrenciye ait` : `listeden çıkarılmış ${data.full_name} adlı öğrenciye ait`;
+  if (!isAdmin()) { toast(`Bu numara ${where}. Düzeltmesi için okul yöneticisine haber ver.`, true); return; }
+  if (data.active && data.class_id === classId) { toast(`${data.full_name} zaten bu sınıfta.`, true); return; }
+  if (!confirm(`Bu numara ${where}. Öğrenci ${target ? target.name : 'bu'} sınıfına ${data.active ? 'taşınsın' : 'geri alınsın'} mı?`)) return;
+  const { error } = await sb.from('students').update({ class_id: classId, active: true }).eq('id', data.id);
+  if (fail(error, 'Öğrenci')) return;
+  toast(`${data.full_name}, ${target ? target.name : 'bu'} sınıfına ${data.active ? 'taşındı' : 'geri alındı'}.`);
+  await loadClasses();
+  viewClasses();
+}
+
 function normClass(s) {
-  const raw = String(s).replace(/\s+/g, ' ').trim();
+  const raw = String(s).replace(/[^\p{L}\p{N}\s\-\/.]/gu, ' ').replace(/\s+/g, ' ').trim();
   const m = raw.toLocaleUpperCase('tr').match(/^(\d{1,2})\s*[-./ ]?\s*([A-ZÇĞİÖŞÜ])$/);
   return m ? `${m[1]}-${m[2]}` : raw;
 }
@@ -841,8 +880,12 @@ function parseEokul(wb) {
       if (!name || !/^\d+$/.test(no)) continue;
       const fromCol = cCls >= 0 ? String(row[cCls] ?? '').trim() : '';
       const cls = normClass(fromCol || titleClass || sn);
-      if (!groups.has(cls)) groups.set(cls, { name: cls, grade: guessGrade(cls), students: [] });
-      groups.get(cls).students.push({ no, name: titleCase(name) });
+      const key = classKey(cls);
+      if (!groups.has(key)) {
+        const existing = yearClasses().find(c => classKey(c.name) === key);
+        groups.set(key, { name: existing ? existing.name : cls, grade: existing ? existing.grade : guessGrade(cls), students: [] });
+      }
+      groups.get(key).students.push({ no, name: titleCase(name) });
     }
   }
   return [...groups.values()].sort(byName);
@@ -876,8 +919,11 @@ async function doImport() {
     const merged = new Map();
     for (const x of S.importPreview) {
       if (!x.name) { toast('Boş sınıf adı var.', true); return; }
-      if (!merged.has(x.name)) merged.set(x.name, { name: x.name, grade: x.grade, students: [] });
-      merged.get(x.name).students.push(...x.students);
+      const key = classKey(x.name);
+      const existing = yearClasses().find(c => classKey(c.name) === key);
+      const name = existing ? existing.name : x.name;
+      if (!merged.has(key)) merged.set(key, { name, grade: x.grade, students: [] });
+      merged.get(key).students.push(...x.students);
     }
     const groups = [...merged.values()];
     const { data: cls, error } = await sb.from('classes')
@@ -1889,6 +1935,23 @@ async function viewSchool() {
   view().querySelectorAll('[data-role]').forEach(s => { s.onchange = () => setMember(s.dataset.role, { role: s.value }, 'Rol güncellendi.'); });
 }
 
+// ---------- Hareketsizlikte otomatik çıkış ----------
+function markActive() {
+  const now = Date.now();
+  if (!markActive.last || now - markActive.last > 30000) { markActive.last = now; keep('lastActive', now); }
+}
+['click', 'keydown', 'touchstart', 'scroll'].forEach(ev => window.addEventListener(ev, markActive, { passive: true }));
+function idleExpired() {
+  const last = restore('lastActive', null);
+  return last && Date.now() - last > IDLE_MINUTES * 60000;
+}
+setInterval(async () => {
+  if (!S.user || !idleExpired()) return;
+  keep('lastActive', null);
+  await sb.auth.signOut();
+  setTimeout(() => renderAuth('login', `${IDLE_MINUTES} dakika işlem yapılmadığı için güvenlik amacıyla çıkış yapıldı.`), 50);
+}, 60000);
+
 // ---------- Başlangıç ----------
 sb.auth.onAuthStateChange(event => {
   if (event === 'PASSWORD_RECOVERY') setTimeout(() => renderAuth('setpass'), 0);
@@ -1902,6 +1965,14 @@ sb.auth.onAuthStateChange(event => {
   const { data: { session } } = await sb.auth.getSession();
   if (session && /type=(invite|recovery)/.test(BOOT_HASH)) return renderAuth('setpass');
   if (!session) return renderAuth('login');
+  if (idleExpired()) {
+    keep('lastActive', null);
+    await sb.auth.signOut();
+    setTimeout(() => renderAuth('login', `${IDLE_MINUTES} dakika işlem yapılmadığı için güvenlik amacıyla çıkış yapıldı.`), 50);
+    return;
+  }
+  markActive.last = 0;
+  markActive();
   await afterLogin(session);
 })();
 </script>
