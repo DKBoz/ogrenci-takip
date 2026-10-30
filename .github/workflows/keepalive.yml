@@ -1,0 +1,16 @@
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: '0 6 * * 1,4'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Supabase'e küçük bir istek gönder
+        run: |
+          curl --fail --silent --show-error \
+            "https://ixqeazpoerbpryrvamkr.supabase.co/rest/v1/schools?select=id&limit=1" \
+            -H "apikey: sb_publishable_KnM1ZYjZZ6xsMnnyIE41IA_hwYE-wCv"
