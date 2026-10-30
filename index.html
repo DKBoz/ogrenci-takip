@@ -189,6 +189,33 @@ table.items select { min-width: 220px; }
 .an .detail table td { white-space: normal; }
 .neg { color: var(--absent); font-weight: 700; }
 .explain { font-size: .9rem; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--bg); padding: 10px 14px; min-height: 44px; cursor: pointer; font-weight: 600; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.student { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 760px) { .student { grid-template-columns: 1fr; } }
+.s-left, .s-right { display: grid; gap: 10px; min-width: 0; }
+.obj { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.otext b { font-weight: 600; }
+.otext.tag-s b::after { content: "  güçlü yön"; font-size: .78rem; color: var(--present); font-weight: 600; }
+.otext.tag-n b::after { content: "  sonraki adım"; font-size: .78rem; color: var(--absent); font-weight: 600; }
+.pick { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.lv { min-width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: pointer; font-weight: 700; color: var(--muted); }
+.lv[aria-pressed="true"] { color: var(--ink); border-width: 2px; }
+.lv.l1[aria-pressed="true"] { background: var(--absent-bg); border-color: var(--absent); }
+.lv.l2[aria-pressed="true"] { background: var(--late-bg); border-color: var(--late); }
+.lv.l3[aria-pressed="true"] { background: var(--excused-bg); border-color: var(--excused); }
+.lv.l4[aria-pressed="true"] { background: var(--present-bg); border-color: var(--present); }
+.lv.zero[aria-pressed="true"] { background: var(--soft); border-color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: .88rem; font-weight: 600; background: var(--soft); }
+.chip.l1 { background: var(--absent-bg); color: var(--absent); }
+.chip.l2 { background: var(--late-bg); color: var(--late); }
+.chip.l3 { background: var(--excused-bg); color: var(--excused); }
+.chip.l4 { background: var(--present-bg); color: var(--present); }
+.comment { background: var(--bg); border-radius: 8px; padding: 12px 14px; line-height: 1.6; }
+.comment.empty { color: var(--muted); }
 
 #toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 140%);
@@ -228,7 +255,7 @@ const S = {
   tab: 'lessons', year: currentYear(), classes: [], courses: [], objCache: {},
   L: null, students: [], objectives: [], recent: [],
   classView: null, courseView: null, importPreview: null, coursePreview: null, authMode: 'login',
-  X: null, AN: null,
+  X: null, AN: null, CM: null,
 };
 
 // ---------- Yardımcılar ----------
@@ -417,7 +444,7 @@ async function openSchool(id) {
   S.schoolId = id;
   S.role = (S.memberships.find(m => m.school_id === id) || {}).role;
   keep('school', id);
-  S.objCache = {}; S.L = null; S.X = null; S.AN = null; S.classView = null; S.courseView = null; S.importPreview = null; S.coursePreview = null;
+  S.objCache = {}; S.L = null; S.X = null; S.AN = null; S.CM = null; S.classView = null; S.courseView = null; S.importPreview = null; S.coursePreview = null;
   await Promise.all([loadClasses(), loadCourses()]);
   renderShell();
 }
@@ -428,14 +455,14 @@ async function loadClasses() {
 }
 async function loadCourses() {
   const { data, error } = await sb.from('courses')
-    .select('id, code, title, subject, grade, book, note, scale, draft, active').eq('school_id', S.schoolId);
+    .select('id, code, title, subject, subject_names, grade, book, note, scale, draft, active').eq('school_id', S.schoolId);
   if (fail(error, 'Dersler')) return;
   S.courses = (data || []).sort((a, b) => a.title.localeCompare(b.title, 'tr', { numeric: true }));
 }
 async function getObjectives(courseId) {
   if (S.objCache[courseId]) return S.objCache[courseId];
   const { data, error } = await sb.from('objectives')
-    .select('id, code, unit, sort, area, label, description, example').eq('course_id', courseId).order('sort');
+    .select('id, code, unit, sort, area, label, description, example, phrases').eq('course_id', courseId).order('sort');
   if (fail(error, 'Kazanımlar')) return [];
   S.objCache[courseId] = data || [];
   return S.objCache[courseId];
@@ -443,7 +470,7 @@ async function getObjectives(courseId) {
 const yearClasses = () => S.classes.filter(c => c.academic_year === S.year);
 
 function renderShell() {
-  const tabs = [['lessons', 'Ders ve yoklama'], ['exams', 'Sınavlar'], ['analysis', 'Analiz'], ['classes', 'Sınıflar'], ['courses', 'Dersler']];
+  const tabs = [['lessons', 'Ders ve yoklama'], ['exams', 'Sınavlar'], ['analysis', 'Analiz'], ['comments', 'Yorumlar'], ['classes', 'Sınıflar'], ['courses', 'Dersler']];
   if (isAdmin()) tabs.push(['school', 'Okul']);
   if (!tabs.some(t => t[0] === S.tab)) S.tab = 'lessons';
   app.innerHTML = `${topBar()}
@@ -460,7 +487,7 @@ function renderShell() {
       renderShell();
     };
   });
-  ({ lessons: viewLessons, exams: viewExams, analysis: viewAnalysis, classes: viewClasses, courses: viewCourses, school: viewSchool })[S.tab]();
+  ({ lessons: viewLessons, exams: viewExams, analysis: viewAnalysis, comments: viewComments, classes: viewClasses, courses: viewCourses, school: viewSchool })[S.tab]();
 }
 
 // ---------- Ders ve yoklama ----------
@@ -1876,6 +1903,304 @@ function drawAnalysis() {
   });
 }
 
+// ---------- Değerlendirme ve veli yorumları ----------
+// Yorum kalıpları Yorum Motoru'ndan alındı.
+const T = {
+  tr: {
+    open: {
+      1: ["Çocuğunuz {S} öğrenme yolculuğunun başında.", "Çocuğunuz {S} dersinde ilk adımlarını atıyor.", "Çocuğunuz {S} ile tanışma sürecinde ve her derste yeni şeyler keşfediyor."],
+      2: ["Çocuğunuz {S} dersinde destekle güzel adımlar atıyor.", "Çocuğunuz {S} dersinde kendi hızında ilerliyor.", "Çocuğunuzun {S} becerileri filizleniyor."],
+      3: ["Çocuğunuz {S} dersinde güzel bir gelişim gösteriyor.", "Çocuğunuzun {S} becerileri her geçen hafta gelişiyor.", "Çocuğunuz {S} dersinde emin adımlarla ilerliyor."],
+      4: ["Çocuğunuz {S} dersinde iyi bir düzeyde ilerliyor.", "Çocuğunuz {S} dersinde istikrarlı ve güzel bir ilerleme gösteriyor.", "Çocuğunuz {S} dersinde öğrendiklerini büyük ölçüde başarıyla kullanıyor."],
+      5: ["Çocuğunuz {S} dersinde çok başarılı bir performans sergiliyor.", "Çocuğunuz {S} dersinde öğrendiklerini kendinden emin bir şekilde kullanıyor.", "Çocuğunuz {S} dersinde parlıyor."]
+    },
+    strength: {
+      1: ["{P} konusuyla tanışmaya başladı.", "{P} konusunda ilk adımlarını atıyor.", "{P} konusunu dinlediğinde tanımaya başladı."],
+      2: ["{P} konusunda destekle güzel adımlar atıyor.", "{P} konusunda öğretmen desteğiyle ilerliyor.", "{P} konusunda gelişmeye başladı."],
+      3: ["{P} konusunda güzel bir gelişim gösteriyor.", "{P} konusunda örnek ve görsel desteğiyle başarılı oluyor.", "{P} konusunda emin adımlarla ilerliyor."],
+      4: ["{P} konusunda iyi bir düzeye ulaştı.", "Özellikle {p} konusunda başarılı.", "{P} konusunda küçük hatalarla rahatça ilerliyor."],
+      5: ["Özellikle {p} konusunda çok başarılı.", "{P} konusunda kendinden emin ve başarılı.", "{P} konusunda yardım almadan çok iyi bir performans gösteriyor."]
+    },
+    next: {
+      low: ["Şimdi {p} konusu üzerinde birlikte çalışıyoruz.", "{P} konusunda daha fazla pratik yapmasını destekliyoruz.", "Oyunlar ve tekrarlarla {p} konusunu pekiştiriyoruz."],
+      mid: ["{P} konusunda daha bağımsız olması için çalışıyoruz.", "{P} konusunda daha az desteğe ihtiyaç duyması için pratik yapıyoruz.", "Bir sonraki hedefimiz, {p} konusunda kendine daha çok güvenmesi."],
+      high: ["{P} konusunda tamamen kendi başına ilerlemesini hedefliyoruz.", "{P} konusunda küçük hataları azaltmak için çalışıyoruz.", "{P} konusunda tam bir ustalık kazanmasını destekliyoruz."],
+      top: ["Bu başarısını yeni konularda da sürdürmesini teşvik ediyoruz.", "{P} konusundaki becerisini yeni durumlarda kullanmasını destekliyoruz.", "Kendini daha zorlayıcı etkinliklerle geliştirmesini destekliyoruz."]
+    }
+  },
+  en: {
+    open: {
+      1: ["Your child is at the start of their {S} learning journey.", "Your child is taking their first steps in {S}.", "Your child is getting to know {S} and discovering something new in every lesson."],
+      2: ["Your child is taking good steps in {S} with support.", "Your child is progressing in {S} at their own pace.", "Your child's {S} skills are starting to grow."],
+      3: ["Your child is making good progress in {S}.", "Your child's {S} skills are growing every week.", "Your child is moving forward steadily in {S}."],
+      4: ["Your child is making very good progress in {S}.", "Your child is progressing steadily and well in {S}.", "Your child uses most of what they have learnt in {S} successfully."],
+      5: ["Your child is doing excellently in {S}.", "Your child uses what they have learnt in {S} with real confidence.", "Your child is shining in {S} lessons."]
+    },
+    strength: {
+      1: ["They are beginning to {p}.", "They are just getting started with learning to {p}.", "They understand the basics and are starting to {p}."],
+      2: ["With support, they are starting to {p}.", "They can {p} with help from the teacher.", "They are taking their first steps to {p}."],
+      3: ["They are making good progress and can {p} with some support.", "With a picture or model, they can {p}.", "They are steadily learning to {p}."],
+      4: ["They can {p} well, with only small errors.", "They {p} mostly without help.", "They are doing well when they {p}."],
+      5: ["They can {p} confidently and without help.", "They {p} with great confidence.", "They are excellent when they {p}."]
+    },
+    next: {
+      low: ["Next, we are practising together how to {p}.", "We are using games and repetition to help them {p}.", "We are giving them extra practice to {p}."],
+      mid: ["Next, we want them to {p} more independently.", "We are practising so they can {p} with less support.", "Our next goal is for them to {p} with more confidence."],
+      high: ["Our next goal is for them to {p} completely on their own.", "We are working on reducing small errors when they {p}.", "We are helping them {p} with full accuracy."],
+      top: ["We are encouraging them to use this skill in new situations too.", "We will keep challenging them to {p} in longer conversations.", "We are helping them build on this success in new topics."]
+    }
+  },
+  de: {
+    open: {
+      1: ["Ihr Kind steht am Anfang seiner {S}-Lernreise.", "Ihr Kind macht im {S}unterricht seine ersten Schritte.", "Ihr Kind lernt {S} gerade kennen und entdeckt in jeder Stunde etwas Neues."],
+      2: ["Ihr Kind macht im {S}unterricht mit Unterstützung schöne Fortschritte.", "Ihr Kind lernt im {S}unterricht in seinem eigenen Tempo.", "Die {S}kenntnisse Ihres Kindes beginnen zu wachsen."],
+      3: ["Ihr Kind macht im {S}unterricht gute Fortschritte.", "Die {S}kenntnisse Ihres Kindes wachsen von Woche zu Woche.", "Ihr Kind kommt im {S}unterricht Schritt für Schritt voran."],
+      4: ["Ihr Kind macht im {S}unterricht sehr gute Fortschritte.", "Ihr Kind entwickelt sich im {S}unterricht stetig und gut.", "Ihr Kind setzt das meiste Gelernte im {S}unterricht erfolgreich um."],
+      5: ["Ihr Kind zeigt im {S}unterricht hervorragende Leistungen.", "Ihr Kind wendet das Gelernte im {S}unterricht sehr sicher an.", "Ihr Kind glänzt im {S}unterricht."]
+    },
+    strength: {
+      1: ["Es macht erste Schritte bei diesem Lernziel: {p}.", "Beim Zuhören erkennt es schon erste Inhalte zu diesem Lernziel: {p}.", "Es lernt gerade die Grundlagen für dieses Lernziel: {p}."],
+      2: ["Mit Hilfe der Lehrkraft kann es schon {p}.", "Durch Nachsprechen kann es bereits {p}.", "Mit Unterstützung kann es schon {p}."],
+      3: ["Mit Bild- oder Beispielhilfe kann es {p}.", "Es macht gute Fortschritte und kann mit etwas Unterstützung {p}.", "Mit wenig Hilfe kann es schon {p}."],
+      4: ["Es kann schon gut {p}, nur mit kleinen Fehlern.", "Es kann meist ohne Hilfe {p}.", "Es kann überwiegend selbstständig {p}."],
+      5: ["Es kann bereits sehr sicher und ohne Hilfe {p}.", "Ohne Hilfe kann es schon sehr gut {p}.", "Sehr selbstbewusst kann es bereits {p}."]
+    },
+    next: {
+      low: ["Unser nächstes Lernziel: {p}.", "Als Nächstes üben wir gemeinsam weiter: {p}.", "Mit Spielen und Wiederholungen festigen wir: {p}."],
+      mid: ["Mit weniger Unterstützung üben wir jetzt: {p}.", "Als Nächstes festigen wir, damit es sicherer wird: {p}.", "Unser nächstes Ziel ist mehr Selbstständigkeit bei diesem Lernziel: {p}."],
+      high: ["Für volle Sicherheit üben wir weiter: {p}.", "Wir arbeiten an den letzten kleinen Fehlern bei diesem Lernziel: {p}.", "Bald soll es ganz ohne Hilfe gelingen: {p}."],
+      top: ["Wir ermutigen es, dieses Können auch in neuen Situationen zu zeigen.", "Wir fördern es weiter mit anspruchsvolleren Aufgaben.", "Wir unterstützen es dabei, das Gelernte auf neue Themen zu übertragen."]
+    }
+  }
+};
+const LANGS = { tr: 'TR', en: 'EN', de: 'DE' };
+function hash(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function capFirst(s, lang) { return s ? s.charAt(0).toLocaleUpperCase(lang === 'tr' ? 'tr' : lang) + s.slice(1) : s; }
+function fillTpl(tpl, p, lang, subj) { return tpl.replace('{P}', capFirst(p, lang)).replace('{p}', p).replace('{S}', subj); }
+function bandOf(l, mx) { return mx <= 1 ? 5 : Math.min(5, Math.max(1, Math.round((l - 1) / (mx - 1) * 4) + 1)); }
+function scaleMax(c) { const s = Array.isArray(c.scale) ? c.scale.map(x => Number(x.n)).filter(n => !isNaN(n)) : []; return s.length ? Math.max(...s) : 5; }
+// Sınav başarısını rubrik ölçeğine çevirir (5'li ölçekte: %90+ → 5, %70+ → 4, %50+ → 3, %30+ → 2, altı → 1)
+function testLevel(pct, mx) { return Math.min(mx, Math.max(1, Math.round(pct * mx))); }
+
+function combinedLevel(CM, sid, oid) {
+  const r = CM.scores.get(sid + '|' + oid);
+  const t = CM.tests.get(sid + '|' + oid);
+  const rl = r != null && r >= 1 ? r : null;
+  const tl = t ? testLevel(t.pct, CM.mx) : null;
+  if (rl != null && tl != null) return Math.round((rl + tl) / 2);
+  return rl != null ? rl : tl;
+}
+
+function buildComments(CM) {
+  const lang = CM.lang, L = T[lang], mx = CM.mx;
+  const c = S.courses.find(x => x.id === CM.courseId) || {};
+  const names = c.subject_names && typeof c.subject_names === 'object' ? c.subject_names : {};
+  const subj = names[lang] || names.tr || c.subject || '';
+  const objs = CM.unit === 'all' ? CM.objs : CM.objs.filter(o => o.unit === CM.unit);
+  const sentUse = new Map(), comboUse = new Map(), strUse = new Map(), nxtUse = new Map();
+  const inc = (m, k) => m.set(k, (m.get(k) || 0) + 1), get = (m, k) => m.get(k) || 0;
+  return CM.students.map(st => {
+    const lv = {};
+    objs.forEach(o => { const v = combinedLevel(CM, st.id, o.id); if (v != null && v >= 1) lv[o.id] = v; });
+    const scored = objs.filter(o => lv[o.id] != null);
+    if (!scored.length) return null;
+    const vals = scored.map(o => lv[o.id]);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const overall = Math.min(mx, Math.max(1, Math.round(avg)));
+    const seed = hash(st.full_name), mxv = Math.max(...vals);
+    const byUse = (m, salt) => (a, b) => (get(m, a.id) - get(m, b.id)) || ((hash(salt + a.id) ^ seed) - (hash(salt + b.id) ^ seed));
+    const strength = scored.filter(o => lv[o.id] === mxv).sort(byUse(strUse, 's'))[0];
+    let nextO = null;
+    if (scored.length > 1) {
+      const others = scored.filter(o => o.id !== strength.id);
+      const lo = Math.min(...others.map(o => lv[o.id]));
+      nextO = others.filter(o => lv[o.id] === lo).sort(byUse(nxtUse, 'n'))[0];
+    }
+    inc(strUse, strength.id);
+    if (nextO) inc(nxtUse, nextO.id);
+    const ob = bandOf(overall, mx), sb2 = bandOf(lv[strength.id], mx);
+    const nTarget = nextO || strength, nb = bandOf(lv[nTarget.id], mx);
+    const nKey = nextO ? (nb <= 2 ? 'low' : nb === 3 ? 'mid' : nb === 4 ? 'high' : 'top') : (nb >= 5 ? 'top' : nb === 4 ? 'high' : nb === 3 ? 'mid' : 'low');
+    const O = L.open[ob], Sx = L.strength[sb2], N = L.next[nKey];
+    const ks = `${strength.id}|${sb2}`, kn = `${nTarget.id}|${nKey}`;
+    let best = null;
+    for (let a = 0; a < O.length; a++) for (let b = 0; b < Sx.length; b++) for (let d = 0; d < N.length; d++) {
+      const key = `o${ob}.${a}|${ks}.${b}|${kn}.${d}`;
+      const sc = [get(comboUse, key), get(sentUse, `o${ob}.${a}`) + get(sentUse, `s${sb2}.${b}`) + get(sentUse, `n${nKey}.${d}`), (hash(key) ^ seed) >>> 0];
+      if (!best || sc[0] < best.sc[0] || (sc[0] === best.sc[0] && (sc[1] < best.sc[1] || (sc[1] === best.sc[1] && sc[2] < best.sc[2])))) best = { a, b, d, key, sc };
+    }
+    inc(comboUse, best.key); inc(sentUse, `o${ob}.${best.a}`); inc(sentUse, `s${sb2}.${best.b}`); inc(sentUse, `n${nKey}.${best.d}`);
+    const ph = o => (o.phrases && o.phrases[lang]) || o.label;
+    const note = (CM.notes.get(st.id) || '').trim();
+    const parts = { open: fillTpl(O[best.a], '', lang, subj), s: fillTpl(Sx[best.b], ph(strength), lang, subj), n: fillTpl(N[best.d], ph(nTarget), lang, subj), note };
+    return { overall, strength: strength.id, next: nextO ? nextO.id : null, parts, text: [parts.open, parts.s, parts.n, parts.note].filter(Boolean).join(' ') };
+  });
+}
+
+async function viewComments() {
+  const cls = yearClasses();
+  if (!cls.length || !S.courses.length) {
+    view().innerHTML = empty('Yorumlar için önce sınıf listesi ve dersler eklenmeli.');
+    return;
+  }
+  if (!S.CM || !cls.some(c => c.id === S.CM.classId)) {
+    const last = restore('cm_' + S.schoolId, {});
+    const classId = (cls.find(c => c.id === last.classId) || cls[0]).id;
+    S.CM = { classId, courseId: pickCourse(classId, last.courseId), unit: last.unit || 'all', lang: last.lang || 'tr' };
+  }
+  await loadComments();
+}
+
+async function loadComments() {
+  const CM = S.CM;
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  const course = S.courses.find(c => c.id === CM.courseId);
+  if (!course) { view().innerHTML = empty('Bu sınıf için ders bulunamadı.'); return; }
+  CM.mx = scaleMax(course);
+  CM.objs = await getObjectives(CM.courseId);
+  if (CM.unit !== 'all' && !CM.objs.some(o => o.unit === CM.unit)) CM.unit = 'all';
+  const st = await sb.from('students').select('id, full_name, school_no').eq('class_id', CM.classId).eq('active', true);
+  if (fail(st.error, 'Öğrenciler')) return;
+  CM.students = (st.data || []).sort(byNo);
+  CM.scores = new Map(); CM.tests = new Map(); CM.notes = new Map();
+  const sids = CM.students.map(s => s.id), oids = CM.objs.map(o => o.id);
+  if (sids.length && oids.length) {
+    const [rs, tp, nt] = await Promise.all([
+      fetchAll(() => sb.from('rubric_scores').select('student_id, objective_id, score').in('student_id', sids).in('objective_id', oids)),
+      fetchAll(() => sb.from('objective_performance').select('student_id, objective_id, pct, max_total').in('student_id', sids).in('objective_id', oids)),
+      sb.from('student_notes').select('student_id, parent_note').eq('course_id', CM.courseId).in('student_id', sids),
+    ]);
+    if (fail(rs.error, 'Rubrik puanları') || fail(tp.error, 'Sınav sonuçları') || fail(nt.error, 'Notlar')) return;
+    rs.data.forEach(r => CM.scores.set(r.student_id + '|' + r.objective_id, Number(r.score)));
+    tp.data.forEach(r => CM.tests.set(r.student_id + '|' + r.objective_id, { pct: Number(r.pct), max: Number(r.max_total) }));
+    (nt.data || []).forEach(r => CM.notes.set(r.student_id, r.parent_note || ''));
+  }
+  keep('cm_' + S.schoolId, { classId: CM.classId, courseId: CM.courseId, unit: CM.unit, lang: CM.lang });
+  drawComments();
+}
+
+function scoreButtons(CM, st, o) {
+  const v = CM.scores.get(st.id + '|' + o.id);
+  const course = S.courses.find(c => c.id === CM.courseId) || {};
+  const scale = (Array.isArray(course.scale) ? course.scale : []).filter(s => Number(s.n) >= 1).sort((a, b) => a.n - b.n);
+  const levels = scale.length ? scale : Array.from({ length: CM.mx }, (_, i) => ({ n: i + 1, label: String(i + 1) }));
+  const zero = `<button type="button" class="lv zero" data-sid="${st.id}" data-o="${o.id}" data-v="0" aria-pressed="${v === 0}" title="Henüz gözlenmedi" aria-label="${esc(o.label)}: henüz gözlenmedi">–</button>`;
+  return zero + levels.map(s => `<button type="button" class="lv l${Math.max(1, Math.min(4, Math.ceil(s.n / CM.mx * 4)))}" data-sid="${st.id}" data-o="${o.id}" data-v="${s.n}" aria-pressed="${v === Number(s.n)}" title="${esc(s.label || '')}" aria-label="${esc(o.label)}: ${s.n}${s.label ? ', ' + esc(s.label) : ''}">${s.n}</button>`).join('');
+}
+
+function drawComments() {
+  const CM = S.CM;
+  const units = groupUnits(CM.objs);
+  const results = buildComments(CM);
+  CM.results = results;
+  const objs = CM.unit === 'all' ? CM.objs : CM.objs.filter(o => o.unit === CM.unit);
+  const course = S.courses.find(c => c.id === CM.courseId) || {};
+  const levelName = n => ((Array.isArray(course.scale) ? course.scale : []).find(s => Number(s.n) === n) || {}).label || String(n);
+  const ready = results.filter(Boolean).length;
+  view().innerHTML = `
+  <section class="panel">
+    <div class="grid4">
+      <label class="field">Sınıf<select id="cClass">${yearClasses().map(c => opt(c.id, c.name, CM.classId)).join('')}</select></label>
+      <label class="field">Ders<select id="cCourse">${coursesFor(CM.classId).map(c => opt(c.id, c.title, CM.courseId)).join('')}</select></label>
+      <label class="field">Ünite<select id="cUnit">${opt('all', 'Tüm üniteler (dönem yorumu)', CM.unit)}${units.map(u => opt(u.name, u.name || 'Ünite', CM.unit)).join('')}</select></label>
+      <div class="field">Dil<div class="seg" role="group" aria-label="Yorum dili">${Object.entries(LANGS).map(([k, l]) => `<button type="button" data-lang="${k}" aria-pressed="${CM.lang === k}">${l}</button>`).join('')}</div></div>
+    </div>
+    <p class="muted explain">Yorum, kazanımlara verdiğin rubrik puanlarıyla sınav ve quizlerdeki kazanım başarısından birlikte oluşur. İkisi de varsa ortalaması alınır. Sınav başarısı puan ölçeğine şöyle çevrilir: %90 ve üstü en yüksek düzey, sonra %70, %50 ve %30 eşikleri. “–” henüz gözlenmedi demektir ve yoruma katılmaz.</p>
+    <div class="row"><span class="muted">${CM.students.length} öğrenci, ${ready} hazır yorum</span>
+      <button type="button" class="btn small" id="copyAll" ${ready ? '' : 'disabled'}>Tüm yorumları kopyala</button></div>
+  </section>
+  ${CM.students.length ? CM.students.map((st, i) => {
+    const res = results[i];
+    let left;
+    if (CM.unit === 'all') {
+      const chips = units.map(u => {
+        const v = u.items.map(o => combinedLevel(CM, st.id, o.id)).filter(x => x != null && x >= 1);
+        if (!v.length) return '';
+        const a = v.reduce((p, q) => p + q, 0) / v.length;
+        return `<span class="chip l${Math.max(1, Math.min(4, Math.ceil(a / CM.mx * 4)))}">${esc(u.name)}: ${a.toFixed(1).replace('.', ',')}</span>`;
+      }).join('');
+      left = chips ? `<div class="chips">${chips}</div><p class="muted hint">Puan vermek için yukarıdan bir ünite seç.</p>` : `<p class="muted hint">Henüz puan ya da sınav sonucu yok. Puan vermek için yukarıdan bir ünite seç.</p>`;
+    } else {
+      left = objs.map(o => {
+        const t = CM.tests.get(st.id + '|' + o.id);
+        const tag = res ? (o.id === res.strength ? ' tag-s' : o.id === res.next ? ' tag-n' : '') : '';
+        return `<div class="obj"><div class="otext${tag}"><b>${esc(o.label)}</b>${t ? `<small>Sınav: %${Math.round(t.pct * 100)} (${fmtNum(t.max)} puanlık soru)</small>` : ''}</div>
+          <span class="pick" role="group" aria-label="${esc(o.label)}">${scoreButtons(CM, st, o)}</span></div>`;
+      }).join('');
+    }
+    const comment = res
+      ? `<p class="comment" lang="${CM.lang}" data-cm="${st.id}">${esc(res.text)}</p>`
+      : `<p class="comment empty">${CM.unit === 'all' ? 'Puan ya da sınav sonucu girildiğinde dönem yorumu burada oluşur.' : 'Bu ünitede bir kazanıma puan verdiğinde ya da sınav sonucu girildiğinde yorum burada oluşur.'}</p>`;
+    return `<article class="panel student">
+      <div class="s-left"><div class="head"><b>${st.school_no ? `<span class="muted">${esc(st.school_no)}</span> ` : ''}${esc(st.full_name)}</b>
+        ${res ? `<span class="chip l${Math.max(1, Math.min(4, Math.ceil(res.overall / CM.mx * 4)))}">${esc(levelName(res.overall))}</span>` : ''}</div>${left}</div>
+      <div class="s-right">${comment}
+        <div class="row"><input class="grow" data-note="${st.id}" value="${esc(CM.notes.get(st.id) || '')}" maxlength="300" placeholder="Veliye kişisel not (isteğe bağlı, yorumun sonuna eklenir)" aria-label="${esc(st.full_name)} için veliye not">
+        <button type="button" class="btn small" data-copy="${st.id}" ${res ? '' : 'disabled'}>Kopyala</button></div>
+      </div></article>`;
+  }).join('') : empty('Bu sınıfta öğrenci yok.')}`;
+
+  $('#cClass').onchange = e => { CM.classId = e.target.value; CM.courseId = pickCourse(CM.classId, CM.courseId); CM.unit = 'all'; loadComments(); };
+  $('#cCourse').onchange = e => { CM.courseId = e.target.value; CM.unit = 'all'; loadComments(); };
+  $('#cUnit').onchange = e => { CM.unit = e.target.value; keep('cm_' + S.schoolId, { classId: CM.classId, courseId: CM.courseId, unit: CM.unit, lang: CM.lang }); drawComments(); };
+  view().querySelectorAll('[data-lang]').forEach(b => {
+    b.onclick = () => { CM.lang = b.dataset.lang; keep('cm_' + S.schoolId, { classId: CM.classId, courseId: CM.courseId, unit: CM.unit, lang: CM.lang }); drawComments(); };
+  });
+  view().querySelectorAll('.lv').forEach(b => { b.onclick = () => setScore(b.dataset.sid, b.dataset.o, Number(b.dataset.v)); });
+  view().querySelectorAll('[data-note]').forEach(inp => {
+    inp.oninput = () => {
+      const sid = inp.dataset.note;
+      CM.notes.set(sid, inp.value);
+      const i = CM.students.findIndex(s => s.id === sid);
+      const res = CM.results[i];
+      if (res) {
+        res.parts.note = inp.value.trim();
+        res.text = [res.parts.open, res.parts.s, res.parts.n, res.parts.note].filter(Boolean).join(' ');
+        const p = view().querySelector(`[data-cm="${sid}"]`);
+        if (p) p.textContent = res.text;
+      }
+      clearTimeout(inp.timer);
+      inp.timer = setTimeout(() => saveNote(sid, inp.value.trim()), 700);
+    };
+  });
+  view().querySelectorAll('[data-copy]').forEach(b => {
+    b.onclick = async () => {
+      const i = CM.students.findIndex(s => s.id === b.dataset.copy);
+      const res = CM.results[i];
+      if (!res) return;
+      try { await navigator.clipboard.writeText(res.text); toast('Yorum kopyalandı.'); } catch (e) { toast('Kopyalanamadı.', true); }
+    };
+  });
+  $('#copyAll').onclick = async () => {
+    const txt = CM.students.map((s, i) => CM.results[i] ? `${s.school_no || ''} ${s.full_name}\n${CM.results[i].text}` : null).filter(Boolean).join('\n\n');
+    try { await navigator.clipboard.writeText(txt); toast('Tüm yorumlar kopyalandı.'); } catch (e) { toast('Kopyalanamadı.', true); }
+  };
+}
+
+async function setScore(sid, oid, v) {
+  const CM = S.CM, k = sid + '|' + oid;
+  const old = CM.scores.get(k);
+  if (old === v) {
+    CM.scores.delete(k);
+    drawComments();
+    const { error } = await sb.from('rubric_scores').delete().eq('student_id', sid).eq('objective_id', oid);
+    if (fail(error, 'Puan silinemedi')) { CM.scores.set(k, old); drawComments(); }
+    return;
+  }
+  CM.scores.set(k, v);
+  drawComments();
+  const { error } = await sb.from('rubric_scores').upsert({ student_id: sid, objective_id: oid, school_id: S.schoolId, score: v }, { onConflict: 'student_id,objective_id' });
+  if (fail(error, 'Puan kaydedilemedi')) {
+    if (old == null) CM.scores.delete(k); else CM.scores.set(k, old);
+    drawComments();
+  }
+}
+
+async function saveNote(sid, text) {
+  const { error } = await sb.from('student_notes').upsert({ student_id: sid, course_id: S.CM.courseId, school_id: S.schoolId, parent_note: text }, { onConflict: 'student_id,course_id' });
+  fail(error, 'Not kaydedilemedi');
+}
+
 // ---------- Okul (yönetici) ----------
 function memberRow(m, p, pending) {
   const me = m.user_id === S.user.id;
@@ -1956,7 +2281,7 @@ setInterval(async () => {
 sb.auth.onAuthStateChange(event => {
   if (event === 'PASSWORD_RECOVERY') setTimeout(() => renderAuth('setpass'), 0);
   if (event === 'SIGNED_OUT') {
-    Object.assign(S, { user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null, L: null, X: null, AN: null, tab: 'lessons' });
+    Object.assign(S, { user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null, L: null, X: null, AN: null, CM: null, tab: 'lessons' });
     setTimeout(() => renderAuth('login'), 0);
   }
 });
