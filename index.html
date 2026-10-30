@@ -216,6 +216,8 @@ table.items select { min-width: 220px; }
 .chip.l4 { background: var(--present-bg); color: var(--present); }
 .comment { background: var(--bg); border-radius: 8px; padding: 12px 14px; line-height: 1.6; }
 .comment.empty { color: var(--muted); }
+.cblock { display: grid; gap: 6px; }
+.cblock .head { align-items: center; }
 
 #toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 140%);
@@ -1982,58 +1984,140 @@ function scaleMax(c) { const s = Array.isArray(c.scale) ? c.scale.map(x => Numbe
 // Sınav başarısını rubrik ölçeğine çevirir (5'li ölçekte: %90+ → 5, %70+ → 4, %50+ → 3, %30+ → 2, altı → 1)
 function testLevel(pct, mx) { return Math.min(mx, Math.max(1, Math.round(pct * mx))); }
 
-function combinedLevel(CM, sid, oid) {
-  const r = CM.scores.get(sid + '|' + oid);
-  const t = CM.tests.get(sid + '|' + oid);
-  const rl = r != null && r >= 1 ? r : null;
-  const tl = t ? testLevel(t.pct, CM.mx) : null;
-  if (rl != null && tl != null) return Math.round((rl + tl) / 2);
-  return rl != null ? rl : tl;
+// Sonuç yorumu kalıpları (sınav ve quizler). Almanca kalıplar Almanca zümresinin gözden geçirmesi için taslaktır.
+const R = {
+  tr: {
+    overall: {
+      5: ['Ünite değerlendirmelerinde çok başarılı sonuçlar aldı.', 'Sınav ve quizlerde konulara çok iyi hâkim olduğunu gösterdi.', 'Yazılı değerlendirmelerde çok güçlü bir performans sergiledi.'],
+      4: ['Ünite değerlendirmelerinde başarılı sonuçlar aldı.', 'Sınav ve quizlerde konuların büyük bölümüne hâkim olduğunu gösterdi.', 'Yazılı değerlendirmelerde iyi bir performans gösterdi.'],
+      3: ['Ünite değerlendirmelerinde konuların önemli bir kısmını başarıyla tamamladı.', 'Sınav ve quizlerde gelişen bir performans gösteriyor.', 'Yazılı değerlendirmelerde orta düzeyde başarılı oldu.'],
+      2: ['Ünite değerlendirmelerinde bazı konularda desteğe ihtiyaç duyduğu görüldü.', 'Sınav ve quizler bazı konuları pekiştirmeye ihtiyacı olduğunu gösterdi.', 'Yazılı değerlendirmelerde gelişime açık alanları belirginleşti.'],
+      1: ['Ünite değerlendirmelerinde konuların çoğunda desteğe ihtiyaç duyuyor.', 'Sınav ve quizler konuları birlikte tekrar etmemiz gerektiğini gösterdi.', 'Yazılı değerlendirmelerde temel konuları pekiştirmeye ihtiyacı var.'],
+    },
+    best: ['En başarılı olduğu konu {p} oldu.', '{P} konusundaki soruları özellikle başarıyla cevapladı.', '{P} konusunda sınavlarda güçlü bir sonuç aldı.'],
+    weak: ['{P} konusunu tekrar etmesi faydalı olacak.', '{P} konusunda biraz daha pratik yapmasını öneriyoruz.', 'Sınav sonuçlarına göre {p} konusunu birlikte pekiştireceğiz.'],
+    top: ['Bu başarısını sonraki ünitelerde de sürdürmesini bekliyoruz.', 'Bu güçlü performansını sürdürmesini teşvik ediyoruz.', 'Bu sonuçların üzerine koyması için onu yeni etkinliklerle destekliyoruz.'],
+    att: { full: 'Derslerin tamamına katıldı.', regular: 'Derslere düzenli olarak katılıyor.', most: 'Derslerin büyük bölümüne katıldı.', low: 'Bazı derslere katılamadı; kaçırdığı konuları birlikte telafi ediyoruz.' },
+  },
+  en: {
+    overall: {
+      5: ['Your child achieved excellent results in the unit assessments.', 'The tests and quizzes show a very strong command of the topics.', 'Your child performed very strongly in written assessments.'],
+      4: ['Your child achieved good results in the unit assessments.', 'The tests and quizzes show a good command of most topics.', 'Your child performed well in written assessments.'],
+      3: ['Your child completed a good part of the unit assessments successfully.', 'The tests and quizzes show developing performance.', 'Your child achieved moderate success in written assessments.'],
+      2: ['The unit assessments show that your child needs support in some topics.', 'The tests and quizzes show that some topics need reinforcing.', 'Written assessments highlighted areas for further development.'],
+      1: ['The unit assessments show that your child needs support in most topics.', 'The tests and quizzes show that we need to revisit the topics together.', 'Written assessments show a need to reinforce the basics.'],
+    },
+    best: ['They did especially well on questions where they had to {p}.', 'Their strongest results came when they had to {p}.', 'They answered questions that asked them to {p} very well.'],
+    weak: ['It would help to practise more how to {p}.', 'We recommend some extra practice to {p}.', 'Based on the results, we will work together on how to {p}.'],
+    top: ['We look forward to seeing this success continue in the next units.', 'We encourage them to keep up this strong work.', 'We will keep offering new challenges to build on these results.'],
+    att: { full: 'They attended every lesson.', regular: 'They attend lessons regularly.', most: 'They attended most lessons.', low: 'They missed some lessons, and we are catching up on those topics together.' },
+  },
+  de: {
+    overall: {
+      5: ['In den Lernzielkontrollen der Einheit hat Ihr Kind hervorragende Ergebnisse erzielt.', 'Tests und Quiz zeigen, dass Ihr Kind die Themen sehr sicher beherrscht.', 'In schriftlichen Überprüfungen zeigt Ihr Kind sehr starke Leistungen.'],
+      4: ['In den Lernzielkontrollen der Einheit hat Ihr Kind gute Ergebnisse erzielt.', 'Tests und Quiz zeigen, dass Ihr Kind die meisten Themen gut beherrscht.', 'In schriftlichen Überprüfungen zeigt Ihr Kind gute Leistungen.'],
+      3: ['Einen guten Teil der Lernzielkontrollen hat Ihr Kind erfolgreich bewältigt.', 'Tests und Quiz zeigen eine sich entwickelnde Leistung.', 'In schriftlichen Überprüfungen war Ihr Kind teilweise erfolgreich.'],
+      2: ['Die Lernzielkontrollen zeigen, dass Ihr Kind bei einigen Themen Unterstützung braucht.', 'Tests und Quiz zeigen, dass einige Themen gefestigt werden müssen.', 'Schriftliche Überprüfungen haben Bereiche gezeigt, an denen wir weiterarbeiten.'],
+      1: ['Die Lernzielkontrollen zeigen, dass Ihr Kind bei den meisten Themen Unterstützung braucht.', 'Tests und Quiz zeigen, dass wir die Themen gemeinsam wiederholen sollten.', 'Schriftliche Überprüfungen zeigen, dass die Grundlagen gefestigt werden müssen.'],
+    },
+    best: ['Besonders gut gelang dieses Lernziel: {p}.', 'Die stärksten Ergebnisse zeigte es bei diesem Lernziel: {p}.', 'Sehr sicher war es bei diesem Lernziel: {p}.'],
+    weak: ['Mehr Übung empfehlen wir bei diesem Lernziel: {p}.', 'Gemeinsam festigen wir dieses Lernziel: {p}.', 'Wiederholung hilft bei diesem Lernziel: {p}.'],
+    top: ['Wir freuen uns, wenn es diesen Erfolg in den nächsten Einheiten fortsetzt.', 'Wir ermutigen es, so weiterzumachen.', 'Mit neuen Herausforderungen bauen wir auf diesen Ergebnissen auf.'],
+    att: { full: 'Es hat an allen Unterrichtsstunden teilgenommen.', regular: 'Es nimmt regelmäßig am Unterricht teil.', most: 'Es hat an den meisten Unterrichtsstunden teilgenommen.', low: 'Einige Stunden hat es verpasst; die verpassten Themen holen wir gemeinsam nach.' },
+  },
+};
+// Devam cümlesi eşikleri: tamamı, %90 ve üstü, %75 ve üstü, altı
+function attKey(a) {
+  if (!a || !a.total) return null;
+  const r = a.attended / a.total;
+  return r >= 1 ? 'full' : r >= 0.9 ? 'regular' : r >= 0.75 ? 'most' : 'low';
 }
+const OUT_WORD = { 5: 'Çok başarılı', 4: 'Başarılı', 3: 'Orta', 2: 'Desteğe ihtiyacı var', 1: 'Çok desteğe ihtiyacı var' };
 
 function buildComments(CM) {
-  const lang = CM.lang, L = T[lang], mx = CM.mx;
+  const lang = CM.lang, L = T[lang], Rl = R[lang], mx = CM.mx;
   const c = S.courses.find(x => x.id === CM.courseId) || {};
   const names = c.subject_names && typeof c.subject_names === 'object' ? c.subject_names : {};
   const subj = names[lang] || names.tr || c.subject || '';
   const objs = CM.unit === 'all' ? CM.objs : CM.objs.filter(o => o.unit === CM.unit);
-  const sentUse = new Map(), comboUse = new Map(), strUse = new Map(), nxtUse = new Map();
+  const ph = o => (o.phrases && o.phrases[lang]) || o.label;
+  const sentUse = new Map(), comboUse = new Map(), strUse = new Map(), nxtUse = new Map(), outUse = new Map();
   const inc = (m, k) => m.set(k, (m.get(k) || 0) + 1), get = (m, k) => m.get(k) || 0;
+  const pickVar = (list, key, seed) => {
+    let best = 0, bestSc = null;
+    list.forEach((_, i) => {
+      const sc = [get(outUse, key + '.' + i), (hash(key + i) ^ seed) >>> 0];
+      if (!bestSc || sc[0] < bestSc[0] || (sc[0] === bestSc[0] && sc[1] < bestSc[1])) { best = i; bestSc = sc; }
+    });
+    inc(outUse, key + '.' + best);
+    return list[best];
+  };
+
   return CM.students.map(st => {
-    const lv = {};
-    objs.forEach(o => { const v = combinedLevel(CM, st.id, o.id); if (v != null && v >= 1) lv[o.id] = v; });
-    const scored = objs.filter(o => lv[o.id] != null);
-    if (!scored.length) return null;
-    const vals = scored.map(o => lv[o.id]);
-    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const overall = Math.min(mx, Math.max(1, Math.round(avg)));
-    const seed = hash(st.full_name), mxv = Math.max(...vals);
-    const byUse = (m, salt) => (a, b) => (get(m, a.id) - get(m, b.id)) || ((hash(salt + a.id) ^ seed) - (hash(salt + b.id) ^ seed));
-    const strength = scored.filter(o => lv[o.id] === mxv).sort(byUse(strUse, 's'))[0];
-    let nextO = null;
-    if (scored.length > 1) {
-      const others = scored.filter(o => o.id !== strength.id);
-      const lo = Math.min(...others.map(o => lv[o.id]));
-      nextO = others.filter(o => lv[o.id] === lo).sort(byUse(nxtUse, 'n'))[0];
-    }
-    inc(strUse, strength.id);
-    if (nextO) inc(nxtUse, nextO.id);
-    const ob = bandOf(overall, mx), sb2 = bandOf(lv[strength.id], mx);
-    const nTarget = nextO || strength, nb = bandOf(lv[nTarget.id], mx);
-    const nKey = nextO ? (nb <= 2 ? 'low' : nb === 3 ? 'mid' : nb === 4 ? 'high' : 'top') : (nb >= 5 ? 'top' : nb === 4 ? 'high' : nb === 3 ? 'mid' : 'low');
-    const O = L.open[ob], Sx = L.strength[sb2], N = L.next[nKey];
-    const ks = `${strength.id}|${sb2}`, kn = `${nTarget.id}|${nKey}`;
-    let best = null;
-    for (let a = 0; a < O.length; a++) for (let b = 0; b < Sx.length; b++) for (let d = 0; d < N.length; d++) {
-      const key = `o${ob}.${a}|${ks}.${b}|${kn}.${d}`;
-      const sc = [get(comboUse, key), get(sentUse, `o${ob}.${a}`) + get(sentUse, `s${sb2}.${b}`) + get(sentUse, `n${nKey}.${d}`), (hash(key) ^ seed) >>> 0];
-      if (!best || sc[0] < best.sc[0] || (sc[0] === best.sc[0] && (sc[1] < best.sc[1] || (sc[1] === best.sc[1] && sc[2] < best.sc[2])))) best = { a, b, d, key, sc };
-    }
-    inc(comboUse, best.key); inc(sentUse, `o${ob}.${best.a}`); inc(sentUse, `s${sb2}.${best.b}`); inc(sentUse, `n${nKey}.${best.d}`);
-    const ph = o => (o.phrases && o.phrases[lang]) || o.label;
+    const seed = hash(st.full_name);
     const note = (CM.notes.get(st.id) || '').trim();
-    const parts = { open: fillTpl(O[best.a], '', lang, subj), s: fillTpl(Sx[best.b], ph(strength), lang, subj), n: fillTpl(N[best.d], ph(nTarget), lang, subj), note };
-    return { overall, strength: strength.id, next: nextO ? nextO.id : null, parts, text: [parts.open, parts.s, parts.n, parts.note].filter(Boolean).join(' ') };
+    const att = CM.att.get(st.id);
+    const ak = attKey(att);
+
+    // Süreç yorumu: rubrik puanları + devam cümlesi + kişisel not
+    let proc = null;
+    const lv = {};
+    objs.forEach(o => { const v = CM.scores.get(st.id + '|' + o.id); if (v != null && v >= 1) lv[o.id] = v; });
+    const scored = objs.filter(o => lv[o.id] != null);
+    if (scored.length) {
+      const vals = scored.map(o => lv[o.id]);
+      const overall = Math.min(mx, Math.max(1, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)));
+      const mxv = Math.max(...vals);
+      const byUse = (m, salt) => (a, b) => (get(m, a.id) - get(m, b.id)) || ((hash(salt + a.id) ^ seed) - (hash(salt + b.id) ^ seed));
+      const strength = scored.filter(o => lv[o.id] === mxv).sort(byUse(strUse, 's'))[0];
+      let nextO = null;
+      if (scored.length > 1) {
+        const others = scored.filter(o => o.id !== strength.id);
+        const lo = Math.min(...others.map(o => lv[o.id]));
+        nextO = others.filter(o => lv[o.id] === lo).sort(byUse(nxtUse, 'n'))[0];
+      }
+      inc(strUse, strength.id);
+      if (nextO) inc(nxtUse, nextO.id);
+      const ob = bandOf(overall, mx), sb2 = bandOf(lv[strength.id], mx);
+      const nTarget = nextO || strength, nb = bandOf(lv[nTarget.id], mx);
+      const nKey = nextO ? (nb <= 2 ? 'low' : nb === 3 ? 'mid' : nb === 4 ? 'high' : 'top') : (nb >= 5 ? 'top' : nb === 4 ? 'high' : nb === 3 ? 'mid' : 'low');
+      const O = L.open[ob], Sx = L.strength[sb2], N = L.next[nKey];
+      const ks = `${strength.id}|${sb2}`, kn = `${nTarget.id}|${nKey}`;
+      let best = null;
+      for (let a = 0; a < O.length; a++) for (let b = 0; b < Sx.length; b++) for (let d = 0; d < N.length; d++) {
+        const key = `o${ob}.${a}|${ks}.${b}|${kn}.${d}`;
+        const sc = [get(comboUse, key), get(sentUse, `o${ob}.${a}`) + get(sentUse, `s${sb2}.${b}`) + get(sentUse, `n${nKey}.${d}`), (hash(key) ^ seed) >>> 0];
+        if (!best || sc[0] < best.sc[0] || (sc[0] === best.sc[0] && (sc[1] < best.sc[1] || (sc[1] === best.sc[1] && sc[2] < best.sc[2])))) best = { a, b, d, key, sc };
+      }
+      inc(comboUse, best.key); inc(sentUse, `o${ob}.${best.a}`); inc(sentUse, `s${sb2}.${best.b}`); inc(sentUse, `n${nKey}.${best.d}`);
+      const parts = [fillTpl(O[best.a], '', lang, subj), fillTpl(Sx[best.b], ph(strength), lang, subj), fillTpl(N[best.d], ph(nTarget), lang, subj)];
+      if (ak) parts.push(Rl.att[ak]);
+      if (note) parts.push(note);
+      proc = { overall, strength: strength.id, next: nextO ? nextO.id : null, text: parts.join(' ') };
+    }
+
+    // Sonuç yorumu: seçilen kapsamdaki tüm sınav ve quizler (veliye yalnızca sözel düzey)
+    let out = null;
+    const tested = objs.filter(o => CM.tests.has(st.id + '|' + o.id));
+    if (tested.length) {
+      let got = 0, max = 0;
+      tested.forEach(o => { const t = CM.tests.get(st.id + '|' + o.id); got += t.pct * t.max; max += t.max; });
+      const pct = max ? got / max : 0;
+      const level = testLevel(pct, 5);
+      const parts = [pickVar(Rl.overall[level], 'o' + level, seed)];
+      const sorted = tested.slice().sort((a, b) => CM.tests.get(st.id + '|' + b.id).pct - CM.tests.get(st.id + '|' + a.id).pct);
+      const bestO = sorted[0], weakO = sorted[sorted.length - 1];
+      const bestL = testLevel(CM.tests.get(st.id + '|' + bestO.id).pct, 5);
+      const weakL = testLevel(CM.tests.get(st.id + '|' + weakO.id).pct, 5);
+      if (bestL >= 3 && (tested.length > 1 || level >= 3)) parts.push(fillTpl(pickVar(Rl.best, 'b', seed), ph(bestO), lang, subj));
+      if (tested.length > 1 && weakO.id !== bestO.id && weakL <= 3) parts.push(fillTpl(pickVar(Rl.weak, 'w', seed), ph(weakO), lang, subj));
+      else if (tested.length === 1 && level <= 2) parts.push(fillTpl(pickVar(Rl.weak, 'w', seed), ph(bestO), lang, subj));
+      else if (level >= 4) parts.push(pickVar(Rl.top, 't', seed));
+      out = { pct, level, best: bestO.id, weak: tested.length > 1 && weakL <= 3 ? weakO.id : null, text: parts.join(' ') };
+    }
+
+    if (!proc && !out) return null;
+    return { proc, out, text: [proc && proc.text, out && out.text].filter(Boolean).join('\n\n') };
   });
 }
 
@@ -2063,20 +2147,47 @@ async function loadComments() {
   if (fail(st.error, 'Öğrenciler')) return;
   CM.students = (st.data || []).sort(byNo);
   CM.scores = new Map(); CM.tests = new Map(); CM.notes = new Map();
+  CM.lessons = []; CM.lessonObjs = new Map(); CM.attRows = [];
   const sids = CM.students.map(s => s.id), oids = CM.objs.map(o => o.id);
   if (sids.length && oids.length) {
-    const [rs, tp, nt] = await Promise.all([
+    const [rs, tp, nt, ls] = await Promise.all([
       fetchAll(() => sb.from('rubric_scores').select('student_id, objective_id, score').in('student_id', sids).in('objective_id', oids)),
       fetchAll(() => sb.from('objective_performance').select('student_id, objective_id, pct, max_total').in('student_id', sids).in('objective_id', oids)),
       sb.from('student_notes').select('student_id, parent_note').eq('course_id', CM.courseId).in('student_id', sids),
+      fetchAll(() => sb.from('lessons').select('id').eq('class_id', CM.classId).eq('course_id', CM.courseId)),
     ]);
-    if (fail(rs.error, 'Rubrik puanları') || fail(tp.error, 'Sınav sonuçları') || fail(nt.error, 'Notlar')) return;
+    if (fail(rs.error, 'Rubrik puanları') || fail(tp.error, 'Sınav sonuçları') || fail(nt.error, 'Notlar') || fail(ls.error, 'Dersler')) return;
     rs.data.forEach(r => CM.scores.set(r.student_id + '|' + r.objective_id, Number(r.score)));
     tp.data.forEach(r => CM.tests.set(r.student_id + '|' + r.objective_id, { pct: Number(r.pct), max: Number(r.max_total) }));
     (nt.data || []).forEach(r => CM.notes.set(r.student_id, r.parent_note || ''));
+    CM.lessons = ls.data.map(l => l.id);
+    for (const part of chunks(CM.lessons, 150)) {
+      const [lo, at] = await Promise.all([
+        fetchAll(() => sb.from('lesson_objectives').select('lesson_id, objective_id').in('lesson_id', part)),
+        fetchAll(() => sb.from('attendance').select('lesson_id, student_id, status').in('lesson_id', part)),
+      ]);
+      if (fail(lo.error, 'Ders kazanımları') || fail(at.error, 'Yoklama')) return;
+      lo.data.forEach(r => { if (!CM.lessonObjs.has(r.lesson_id)) CM.lessonObjs.set(r.lesson_id, new Set()); CM.lessonObjs.get(r.lesson_id).add(r.objective_id); });
+      CM.attRows.push(...at.data);
+    }
   }
   keep('cm_' + S.schoolId, { classId: CM.classId, courseId: CM.courseId, unit: CM.unit, lang: CM.lang });
   drawComments();
+}
+
+// Seçilen kapsamdaki derslerde devam (ünite seçiliyse o ünitenin kazanımlarının işlendiği dersler)
+function computeAttendance(CM) {
+  const unitIds = CM.unit === 'all' ? null : new Set(CM.objs.filter(o => o.unit === CM.unit).map(o => o.id));
+  const inScope = id => !unitIds || [...(CM.lessonObjs.get(id) || [])].some(o => unitIds.has(o));
+  const m = new Map();
+  CM.attRows.forEach(r => {
+    if (!inScope(r.lesson_id)) return;
+    const a = m.get(r.student_id) || { total: 0, attended: 0 };
+    a.total++;
+    if (r.status === 'present' || r.status === 'late') a.attended++;
+    m.set(r.student_id, a);
+  });
+  return m;
 }
 
 function scoreButtons(CM, st, o) {
@@ -2090,6 +2201,7 @@ function scoreButtons(CM, st, o) {
 
 function drawComments() {
   const CM = S.CM;
+  CM.att = computeAttendance(CM);
   const units = groupUnits(CM.objs);
   const results = buildComments(CM);
   CM.results = results;
@@ -2097,6 +2209,8 @@ function drawComments() {
   const course = S.courses.find(c => c.id === CM.courseId) || {};
   const levelName = n => ((Array.isArray(course.scale) ? course.scale : []).find(s => Number(s.n) === n) || {}).label || String(n);
   const ready = results.filter(Boolean).length;
+  const lc = l => Math.max(1, Math.min(4, Math.ceil(l / CM.mx * 4)));
+  const outChip = l => Math.max(1, Math.min(4, Math.ceil(l / 5 * 4)));
   view().innerHTML = `
   <section class="panel">
     <div class="grid4">
@@ -2105,38 +2219,46 @@ function drawComments() {
       <label class="field">Ünite<select id="cUnit">${opt('all', 'Tüm üniteler (dönem yorumu)', CM.unit)}${units.map(u => opt(u.name, u.name || 'Ünite', CM.unit)).join('')}</select></label>
       <div class="field">Dil<div class="seg" role="group" aria-label="Yorum dili">${Object.entries(LANGS).map(([k, l]) => `<button type="button" data-lang="${k}" aria-pressed="${CM.lang === k}">${l}</button>`).join('')}</div></div>
     </div>
-    <p class="muted explain">Yorum, kazanımlara verdiğin rubrik puanlarıyla sınav ve quizlerdeki kazanım başarısından birlikte oluşur. İkisi de varsa ortalaması alınır. Sınav başarısı puan ölçeğine şöyle çevrilir: %90 ve üstü en yüksek düzey, sonra %70, %50 ve %30 eşikleri. “–” henüz gözlenmedi demektir ve yoruma katılmaz.</p>
+    <p class="muted explain"><b>Süreç yorumu</b> rubrik puanlarından oluşur ve her zaman bir devam cümlesiyle biter (tamamı, %90 ve üstü, %75 ve üstü, altı). Veliye not da bu yorumun sonuna eklenir. <b>Sonuç yorumu</b> seçilen kapsamdaki tüm sınav ve quizlerden oluşur. Yüzdeler yalnızca sana görünür, veliye giden metinde sözel düzey yer alır. “–” henüz gözlenmedi demektir ve yoruma katılmaz.</p>
     <div class="row"><span class="muted">${CM.students.length} öğrenci, ${ready} hazır yorum</span>
       <button type="button" class="btn small" id="copyAll" ${ready ? '' : 'disabled'}>Tüm yorumları kopyala</button></div>
   </section>
   ${CM.students.length ? CM.students.map((st, i) => {
     const res = results[i];
+    const a = CM.att.get(st.id);
     let left;
     if (CM.unit === 'all') {
       const chips = units.map(u => {
-        const v = u.items.map(o => combinedLevel(CM, st.id, o.id)).filter(x => x != null && x >= 1);
-        if (!v.length) return '';
-        const a = v.reduce((p, q) => p + q, 0) / v.length;
-        return `<span class="chip l${Math.max(1, Math.min(4, Math.ceil(a / CM.mx * 4)))}">${esc(u.name)}: ${a.toFixed(1).replace('.', ',')}</span>`;
+        const v = u.items.map(o => CM.scores.get(st.id + '|' + o.id)).filter(x => x != null && x >= 1);
+        let got = 0, max = 0;
+        u.items.forEach(o => { const t = CM.tests.get(st.id + '|' + o.id); if (t) { got += t.pct * t.max; max += t.max; } });
+        const parts = [];
+        if (v.length) { const av = v.reduce((p, q) => p + q, 0) / v.length; parts.push(`<span class="chip l${lc(av)}">${esc(u.name)} süreç: ${av.toFixed(1).replace('.', ',')}</span>`); }
+        if (max) parts.push(`<span class="chip l${outChip(testLevel(got / max, 5))}">${esc(u.name)} sınav: %${Math.round(got / max * 100)}</span>`);
+        return parts.join('');
       }).join('');
       left = chips ? `<div class="chips">${chips}</div><p class="muted hint">Puan vermek için yukarıdan bir ünite seç.</p>` : `<p class="muted hint">Henüz puan ya da sınav sonucu yok. Puan vermek için yukarıdan bir ünite seç.</p>`;
     } else {
       left = objs.map(o => {
         const t = CM.tests.get(st.id + '|' + o.id);
-        const tag = res ? (o.id === res.strength ? ' tag-s' : o.id === res.next ? ' tag-n' : '') : '';
+        const tag = res && res.proc ? (o.id === res.proc.strength ? ' tag-s' : o.id === res.proc.next ? ' tag-n' : '') : '';
         return `<div class="obj"><div class="otext${tag}"><b>${esc(o.label)}</b>${t ? `<small>Sınav: %${Math.round(t.pct * 100)} (${fmtNum(t.max)} puanlık soru)</small>` : ''}</div>
           <span class="pick" role="group" aria-label="${esc(o.label)}">${scoreButtons(CM, st, o)}</span></div>`;
       }).join('');
     }
-    const comment = res
-      ? `<p class="comment" lang="${CM.lang}" data-cm="${st.id}">${esc(res.text)}</p>`
-      : `<p class="comment empty">${CM.unit === 'all' ? 'Puan ya da sınav sonucu girildiğinde dönem yorumu burada oluşur.' : 'Bu ünitede bir kazanıma puan verdiğinde ya da sınav sonucu girildiğinde yorum burada oluşur.'}</p>`;
+    const procBlock = res && res.proc
+      ? `<div class="cblock"><div class="head"><b>Süreç yorumu</b><button type="button" class="btn quiet small" data-copy="${st.id}" data-part="proc">Kopyala</button></div><p class="comment" lang="${CM.lang}" data-proc="${st.id}">${esc(res.proc.text)}</p></div>`
+      : `<p class="comment empty">${CM.unit === 'all' ? 'Rubrik puanı verildiğinde süreç yorumu burada oluşur.' : 'Bu ünitede kazanımlara rubrik puanı verdiğinde süreç yorumu burada oluşur.'}</p>`;
+    const outBlock = res && res.out
+      ? `<div class="cblock"><div class="head"><b>Sonuç yorumu</b><span class="muted">${OUT_WORD[res.out.level]}, %${Math.round(res.out.pct * 100)}</span><button type="button" class="btn quiet small" data-copy="${st.id}" data-part="out">Kopyala</button></div><p class="comment" lang="${CM.lang}">${esc(res.out.text)}</p></div>`
+      : `<p class="comment empty">Bu kapsamda sınav ya da quiz sonucu girildiğinde sonuç yorumu burada oluşur.</p>`;
     return `<article class="panel student">
       <div class="s-left"><div class="head"><b>${st.school_no ? `<span class="muted">${esc(st.school_no)}</span> ` : ''}${esc(st.full_name)}</b>
-        ${res ? `<span class="chip l${Math.max(1, Math.min(4, Math.ceil(res.overall / CM.mx * 4)))}">${esc(levelName(res.overall))}</span>` : ''}</div>${left}</div>
-      <div class="s-right">${comment}
-        <div class="row"><input class="grow" data-note="${st.id}" value="${esc(CM.notes.get(st.id) || '')}" maxlength="300" placeholder="Veliye kişisel not (isteğe bağlı, yorumun sonuna eklenir)" aria-label="${esc(st.full_name)} için veliye not">
-        <button type="button" class="btn small" data-copy="${st.id}" ${res ? '' : 'disabled'}>Kopyala</button></div>
+        <span class="chips">${res && res.proc ? `<span class="chip l${lc(res.proc.overall)}">Süreç: ${esc(levelName(res.proc.overall))}</span>` : ''}
+        ${a && a.total ? `<span class="chip">Devam: ${a.attended}/${a.total} ders</span>` : ''}</span></div>${left}</div>
+      <div class="s-right">${procBlock}${outBlock}
+        <div class="row"><input class="grow" data-note="${st.id}" value="${esc(CM.notes.get(st.id) || '')}" maxlength="300" placeholder="Veliye kişisel not (isteğe bağlı, süreç yorumunun sonuna eklenir)" aria-label="${esc(st.full_name)} için veliye not">
+        <button type="button" class="btn small" data-copy="${st.id}" data-part="both" ${res ? '' : 'disabled'}>İkisini kopyala</button></div>
       </div></article>`;
   }).join('') : empty('Bu sınıfta öğrenci yok.')}`;
 
@@ -2152,13 +2274,10 @@ function drawComments() {
       const sid = inp.dataset.note;
       CM.notes.set(sid, inp.value);
       const i = CM.students.findIndex(s => s.id === sid);
-      const res = CM.results[i];
-      if (res) {
-        res.parts.note = inp.value.trim();
-        res.text = [res.parts.open, res.parts.s, res.parts.n, res.parts.note].filter(Boolean).join(' ');
-        const p = view().querySelector(`[data-cm="${sid}"]`);
-        if (p) p.textContent = res.text;
-      }
+      const res = buildComments(CM)[i];
+      CM.results[i] = res;
+      const p = view().querySelector(`[data-proc="${sid}"]`);
+      if (p && res && res.proc) p.textContent = res.proc.text;
       clearTimeout(inp.timer);
       inp.timer = setTimeout(() => saveNote(sid, inp.value.trim()), 700);
     };
@@ -2168,11 +2287,12 @@ function drawComments() {
       const i = CM.students.findIndex(s => s.id === b.dataset.copy);
       const res = CM.results[i];
       if (!res) return;
-      try { await navigator.clipboard.writeText(res.text); toast('Yorum kopyalandı.'); } catch (e) { toast('Kopyalanamadı.', true); }
+      const txt = b.dataset.part === 'proc' ? res.proc.text : b.dataset.part === 'out' ? res.out.text : res.text;
+      try { await navigator.clipboard.writeText(txt); toast('Yorum kopyalandı.'); } catch (e) { toast('Kopyalanamadı.', true); }
     };
   });
   $('#copyAll').onclick = async () => {
-    const txt = CM.students.map((s, i) => CM.results[i] ? `${s.school_no || ''} ${s.full_name}\n${CM.results[i].text}` : null).filter(Boolean).join('\n\n');
+    const txt = CM.students.map((s, i) => CM.results[i] ? `${s.school_no || ''} ${s.full_name}\n${CM.results[i].text}` : null).filter(Boolean).join('\n\n---\n\n');
     try { await navigator.clipboard.writeText(txt); toast('Tüm yorumlar kopyalandı.'); } catch (e) { toast('Kopyalanamadı.', true); }
   };
 }
