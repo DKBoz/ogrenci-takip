@@ -218,6 +218,11 @@ table.items select { min-width: 220px; }
 .comment.empty { color: var(--muted); }
 .cblock { display: grid; gap: 6px; }
 .cblock .head { align-items: center; }
+.how { margin-top: 4px; font-weight: 600; }
+.how-prev { color: var(--present); }
+.how-match { color: var(--excused); }
+.how-manual { color: var(--muted); }
+.how-none { color: var(--absent); }
 
 #toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 140%);
@@ -1339,20 +1344,48 @@ function matchTokens(s) {
     .map(w => w.replace(/'s$/, '').replace(/(ing|es|s)$/, ''))
     .filter(w => w.length > 2 && !MATCH_STOP.has(w));
 }
+// Kelime eşleşmesi: yalnızca en az bir ortak kelime varsa öneri yapar, hangi kelimelerin eşleştiğini de döndürür.
 function suggestObjective(ex, unitObjs) {
-  if (!unitObjs.length) return '';
+  if (!unitObjs.length) return null;
   const areas = SECTION_AREAS[(ex.section || '').toLowerCase()] || [];
   const inArea = unitObjs.filter(o => areas.includes(o.area));
-  const cands = inArea.length ? inArea : unitObjs;
   const exT = new Set(matchTokens(ex.title + ' ' + ex.text));
-  let best = null, bestScore = 0;
+  const scoreOf = o => [...new Set(matchTokens(o.label + ' ' + o.example))].filter(w => exT.has(w));
+  // Bölüm türüne uyan kazanım varsa yalnızca onlar arasında arar; hiçbiri eşleşmezse öneri yapmaz.
+  const cands = inArea.length ? inArea : unitObjs;
+  let best = null;
   for (const o of cands) {
-    let sc = 0;
-    new Set(matchTokens(o.label + ' ' + o.example)).forEach(w => { if (exT.has(w)) sc++; });
-    if (sc > bestScore) { best = o; bestScore = sc; }
+    const words = scoreOf(o);
+    if (words.length && (!best || words.length > best.words.length)) best = { id: o.id, words };
   }
-  if (best) return best.id;
-  return inArea.length ? inArea[0].id : '';
+  return best;
+}
+
+// Aynı testin farklı sürümlerini (A/B, cevaplı/cevapsız) aynı kabul eden dosya adı anahtarı
+function sourceKey(name) {
+  return String(name || '').toLowerCase().replace(/\.rtf$/, '').replace(/[_\-.]+/g, ' ')
+    .replace(/\bwith(out)?\s+answers\b/g, ' ').replace(/\s+/g, ' ').trim().replace(/\s[a-d]$/, '').trim();
+}
+
+async function findPreviousMapping(fileName) {
+  const key = sourceKey(fileName);
+  if (!key) return null;
+  const { data, error } = await fetchAll(() => sb.from('assessments').select('id, course_id, title, source, created_at')
+    .eq('school_id', S.schoolId).neq('source', '').order('created_at', { ascending: false }));
+  if (error || !data) return null;
+  const prev = data.find(a => sourceKey(a.source) === key);
+  if (!prev) return null;
+  const { data: items } = await sb.from('assessment_items').select('label, objective_id').eq('assessment_id', prev.id);
+  const counts = {};
+  (items || []).forEach(it => {
+    const no = String(it.label || '').split('.')[0];
+    if (!no) return;
+    counts[no] = counts[no] || {};
+    counts[no][it.objective_id] = (counts[no][it.objective_id] || 0) + 1;
+  });
+  const map = {};
+  Object.entries(counts).forEach(([no, c]) => { map[no] = Object.entries(c).sort((x, y) => y[1] - x[1])[0][0]; });
+  return Object.keys(map).length ? { courseId: prev.course_id, title: prev.title, map } : null;
 }
 
 async function startImportExam(file) {
@@ -1363,10 +1396,12 @@ async function startImportExam(file) {
     if (!exs.length) { toast('Dosyada numaralı bölüm bulunamadı. Soruları elle girmek için "Yeni sınav oluştur"u kullan.', true); return; }
     const base = file.name.replace(/\.rtf$/i, '');
     const um = base.match(/unit[\s_-]*(?:test[\s_-]*)?(\d+)/i);
+    const prev = await findPreviousMapping(file.name);
     const last = restore('examCourse_' + S.schoolId, null);
-    const course = S.courses.find(c => c.id === last && c.active) || S.courses.find(c => c.active) || S.courses[0];
+    const course = (prev && S.courses.find(c => c.id === prev.courseId))
+      || S.courses.find(c => c.id === last && c.active) || S.courses.find(c => c.active) || S.courses[0];
     S.X = {
-      mode: 'import', fileName: file.name, exs, courseId: course.id, unit: null, unitNo: um ? um[1] : null,
+      mode: 'import', fileName: file.name, exs, courseId: course.id, unit: null, unitNo: um ? um[1] : null, prev,
       title: base.replace(/_/g, ' ').replace(/\bwith(out)?\s+answers\b/i, '').replace(/\s+/g, ' ').trim(),
       kind: 'test', needMatch: true, answerVersion: /with[\s_-]*answers/i.test(base) && !/without/i.test(base), dirty: true,
     };
@@ -1376,26 +1411,50 @@ async function startImportExam(file) {
   }
 }
 
+function howBadge(e, objs) {
+  if (e.how === 'prev') return `<small class="how how-prev">Aynı testin önceki aktarımından alındı</small>`;
+  if (e.how === 'match') return `<small class="how how-match">Ortak kelimeler: ${esc(e.words.join(', '))}. Kontrol et.</small>`;
+  if (e.how === 'manual') return `<small class="how how-manual">Elle seçildi</small>`;
+  return `<small class="how how-none">Öneri yok, kazanımı sen seç.</small>`;
+}
+
 async function drawImportExam() {
   const X = S.X;
   const objs = await getObjectives(X.courseId);
   const units = groupUnits(objs);
+  const prevOk = X.prev && X.prev.courseId === X.courseId;
   if (!units.some(u => u.name === X.unit)) {
-    const unitHit = X.unitNo ? units.find(u => new RegExp('\\b' + X.unitNo + '\\b').test(u.name)) : null;
+    let unitHit = null;
+    if (prevOk) {
+      const ids = Object.values(X.prev.map);
+      const tally = {};
+      objs.filter(o => ids.includes(o.id)).forEach(o => { tally[o.unit] = (tally[o.unit] || 0) + 1; });
+      const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+      if (top) unitHit = units.find(u => u.name === top[0]);
+    }
+    if (!unitHit && X.unitNo) unitHit = units.find(u => new RegExp('\\b' + X.unitNo + '\\b').test(u.name));
     X.unit = (unitHit || units[0] || { name: '' }).name;
     X.needMatch = true;
   }
   if (X.needMatch) {
     const unitObjs = objs.filter(o => o.unit === X.unit);
-    X.exs.forEach(e => { e.objective_id = suggestObjective(e, unitObjs); });
+    X.exs.forEach(e => {
+      const fromPrev = prevOk ? X.prev.map[String(e.no)] : null;
+      if (fromPrev && objs.some(o => o.id === fromPrev)) { e.objective_id = fromPrev; e.how = 'prev'; e.words = []; return; }
+      const s = suggestObjective(e, unitObjs);
+      if (s) { e.objective_id = s.id; e.how = 'match'; e.words = s.words; }
+      else { e.objective_id = ''; e.how = 'none'; e.words = []; }
+    });
     X.needMatch = false;
   }
   const scored = X.exs.reduce((a, e) => a + (Number(e.count) || 0), 0);
   const examples = X.exs.reduce((a, e) => a + e.items.filter(i => i.example).length, 0);
+  const open = X.exs.filter(e => Number(e.count) > 0 && !e.objective_id).length;
   view().innerHTML = `<section class="panel">
     <div class="head"><h2>Dosyadan sınav</h2><button type="button" class="btn ghost small" id="iBack">Vazgeç</button></div>
     <p class="muted">${esc(X.fileName)}</p>
     ${X.answerVersion ? `<p class="note">Bu dosya cevaplı sürüm gibi görünüyor. Örnek maddeleri doğru ayırabilmem için cevapsız sürümü yüklemek daha güvenli.</p>` : ''}
+    ${prevOk ? `<p class="note">Bu testin bir sürümü daha önce “${esc(X.prev.title)}” adıyla aktarılmış. Kazanımlar oradan alındı.</p>` : ''}
     <div class="grid3">
       <label class="field">Ders<select id="iCourse">${S.courses.filter(c => c.active).map(c => opt(c.id, c.title, X.courseId)).join('')}</select></label>
       <label class="field">Ünite<select id="iUnit">${units.map(u => opt(u.name, u.name || 'Ünite', X.unit)).join('')}</select></label>
@@ -1404,14 +1463,14 @@ async function drawImportExam() {
     <label class="field">Başlık<input id="iTitle" value="${esc(X.title)}"></label>
   </section>
   <section class="panel">
-    <div class="head"><h2>Bölümler</h2><span class="muted">${scored} soru</span></div>
-    <p class="muted">Dosyada ${X.exs.length} bölüm bulundu.${examples ? ` Cevabı verilmiş ${examples} örnek madde puanlanmayacak.` : ''} Her bölümün kazanımını kontrol et. Kazanımlar bölüm türüne ve yönergedeki kelimelere bakılarak önerildi, emin olmadığım bölümler boş bırakıldı. Soru sayısı yanlış okunduysa düzeltebilirsin.</p>
+    <div class="head"><h2>Bölümler</h2><span class="muted">${scored} soru${open ? `, ${open} bölümde kazanım seçilmedi` : ''}</span></div>
+    <p class="muted">Dosyada ${X.exs.length} bölüm bulundu.${examples ? ` Cevabı verilmiş ${examples} örnek madde puanlanmayacak.` : ''} Kazanım yalnızca aynı testin önceki bir aktarımı varsa ya da yönergeyle kazanım arasında ortak kelime bulunduysa öneriliyor. Her önerinin altında nereden geldiği yazıyor. Soru sayısı yanlış okunduysa düzeltebilirsin.</p>
     <div class="scroll"><table class="list items"><thead><tr><th>Bölüm</th><th>Soru</th><th>Puan</th><th>Kazanım</th></tr></thead><tbody>
       ${X.exs.map((e, i) => `<tr>
         <td><b>${e.no}. ${esc(e.section)}</b><small>${esc(e.title)}</small>${e.items.some(x => x.example) ? `<small>Örnek madde: ${e.items.filter(x => x.example).map(x => x.n).join(', ')}</small>` : ''}</td>
         <td><input type="number" class="pt" min="0" step="1" data-ei="${i}" data-k="count" value="${e.count}" aria-label="${e.no}. bölümün soru sayısı"></td>
         <td><input type="number" class="pt" min="0.5" step="0.5" data-ei="${i}" data-k="points" value="${e.points}" aria-label="${e.no}. bölümde soru başına puan"></td>
-        <td><select data-ei="${i}" data-k="objective_id" aria-label="${e.no}. bölümün kazanımı">${objOptions(objs, e.objective_id)}</select></td>
+        <td><select data-ei="${i}" data-k="objective_id" aria-label="${e.no}. bölümün kazanımı">${objOptions(objs, e.objective_id)}</select>${howBadge(e, objs)}</td>
       </tr>`).join('')}
     </tbody></table></div>
   </section>
@@ -1425,7 +1484,8 @@ async function drawImportExam() {
   view().querySelectorAll('[data-ei]').forEach(el => {
     el.onchange = () => {
       const e = X.exs[Number(el.dataset.ei)];
-      e[el.dataset.k] = el.dataset.k === 'objective_id' ? el.value : Number(el.value);
+      if (el.dataset.k === 'objective_id') { e.objective_id = el.value; e.how = el.value ? 'manual' : 'none'; drawImportExam(); return; }
+      e[el.dataset.k] = Number(el.value);
       if (el.dataset.k === 'count') drawImportExam();
     };
   });
