@@ -223,6 +223,8 @@ table.items select { min-width: 220px; }
 .how-match { color: var(--excused); }
 .how-manual { color: var(--muted); }
 .how-none { color: var(--absent); }
+.tnote { border-left: 4px solid var(--absent); background: var(--absent-bg); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; font-size: .92rem; }
+.tnote ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 
 #toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 140%);
@@ -2093,6 +2095,9 @@ function attKey(a) {
   return r >= 1 ? 'full' : r >= 0.9 ? 'regular' : r >= 0.75 ? 'most' : 'low';
 }
 const OUT_WORD = { 5: 'Çok başarılı', 4: 'Başarılı', 3: 'Orta', 2: 'Desteğe ihtiyacı var', 1: 'Çok desteğe ihtiyacı var' };
+// Devamsızlık bağlantısı (yalnızca öğretmen görür): kaçırılan derste işlenen kazanımda başarı bu oranın altındaysa
+// ve derse katılan sınıf arkadaşlarının ortalaması en az bu kadar yüksekse gösterilir. İzinli devamsızlık da sayılır.
+const ABS_LINK = { maxPct: 0.5, minGap: 0.2 };
 
 function buildComments(CM) {
   const lang = CM.lang, L = T[lang], Rl = R[lang], mx = CM.mx;
@@ -2207,7 +2212,7 @@ async function loadComments() {
   if (fail(st.error, 'Öğrenciler')) return;
   CM.students = (st.data || []).sort(byNo);
   CM.scores = new Map(); CM.tests = new Map(); CM.notes = new Map();
-  CM.lessons = []; CM.lessonObjs = new Map(); CM.attRows = [];
+  CM.lessons = []; CM.lessonObjs = new Map(); CM.attRows = []; CM.absRows = [];
   const sids = CM.students.map(s => s.id), oids = CM.objs.map(o => o.id);
   if (sids.length && oids.length) {
     const [rs, tp, nt, ls] = await Promise.all([
@@ -2221,6 +2226,12 @@ async function loadComments() {
     tp.data.forEach(r => CM.tests.set(r.student_id + '|' + r.objective_id, { pct: Number(r.pct), max: Number(r.max_total) }));
     (nt.data || []).forEach(r => CM.notes.set(r.student_id, r.parent_note || ''));
     CM.lessons = ls.data.map(l => l.id);
+    const ab = await fetchAll(() => sb.from('objective_absence_compare')
+      .select('student_id, objective_id, pct, lessons_taught, lessons_missed, present_avg, present_n')
+      .eq('class_id', CM.classId).eq('course_id', CM.courseId));
+    if (fail(ab.error, 'Devamsızlık analizi')) return;
+    CM.absRows = ab.data.map(r => ({ ...r, pct: Number(r.pct), present_avg: r.present_avg == null ? null : Number(r.present_avg),
+      lessons_taught: Number(r.lessons_taught), lessons_missed: Number(r.lessons_missed), present_n: Number(r.present_n) }));
     for (const part of chunks(CM.lessons, 150)) {
       const [lo, at] = await Promise.all([
         fetchAll(() => sb.from('lesson_objectives').select('lesson_id, objective_id').in('lesson_id', part)),
@@ -2309,6 +2320,11 @@ function drawComments() {
     const procBlock = res && res.proc
       ? `<div class="cblock"><div class="head"><b>Süreç yorumu</b><button type="button" class="btn quiet small" data-copy="${st.id}" data-part="proc">Kopyala</button></div><p class="comment" lang="${CM.lang}" data-proc="${st.id}">${esc(res.proc.text)}</p></div>`
       : `<p class="comment empty">${CM.unit === 'all' ? 'Rubrik puanı verildiğinde süreç yorumu burada oluşur.' : 'Bu ünitede kazanımlara rubrik puanı verdiğinde süreç yorumu burada oluşur.'}</p>`;
+    const links = (CM.absRows || []).filter(r => r.student_id === st.id && objs.some(o => o.id === r.objective_id)
+      && r.lessons_missed > 0 && r.pct < ABS_LINK.maxPct && r.present_avg != null && r.present_avg - r.pct >= ABS_LINK.minGap);
+    const linkBlock = links.length ? `<div class="tnote"><b>Yalnızca sen görüyorsun: devamsızlıkla bağlantılı olabilecek kazanımlar</b>
+      <ul>${links.map(r => `<li>${esc(objLabel(r.objective_id))}: işlendiği ${r.lessons_taught} dersten ${r.lessons_missed} tanesine katılmadı. Sınavda %${Math.round(r.pct * 100)}, derse katılan ${r.present_n} arkadaşının ortalaması %${Math.round(r.present_avg * 100)}.</li>`).join('')}</ul>
+      <span class="muted">Bu bir eğilimdir, kesin neden değildir. Veliye giden yoruma eklenmez.</span></div>` : '';
     const outBlock = res && res.out
       ? `<div class="cblock"><div class="head"><b>Sonuç yorumu</b><span class="muted">${OUT_WORD[res.out.level]}, %${Math.round(res.out.pct * 100)}</span><button type="button" class="btn quiet small" data-copy="${st.id}" data-part="out">Kopyala</button></div><p class="comment" lang="${CM.lang}">${esc(res.out.text)}</p></div>`
       : `<p class="comment empty">Bu kapsamda sınav ya da quiz sonucu girildiğinde sonuç yorumu burada oluşur.</p>`;
@@ -2316,7 +2332,7 @@ function drawComments() {
       <div class="s-left"><div class="head"><b>${st.school_no ? `<span class="muted">${esc(st.school_no)}</span> ` : ''}${esc(st.full_name)}</b>
         <span class="chips">${res && res.proc ? `<span class="chip l${lc(res.proc.overall)}">Süreç: ${esc(levelName(res.proc.overall))}</span>` : ''}
         ${a && a.total ? `<span class="chip">Devam: ${a.attended}/${a.total} ders</span>` : ''}</span></div>${left}</div>
-      <div class="s-right">${procBlock}${outBlock}
+      <div class="s-right">${procBlock}${outBlock}${linkBlock}
         <div class="row"><input class="grow" data-note="${st.id}" value="${esc(CM.notes.get(st.id) || '')}" maxlength="300" placeholder="Veliye kişisel not (isteğe bağlı, süreç yorumunun sonuna eklenir)" aria-label="${esc(st.full_name)} için veliye not">
         <button type="button" class="btn small" data-copy="${st.id}" data-part="both" ${res ? '' : 'disabled'}>İkisini kopyala</button></div>
       </div></article>`;
