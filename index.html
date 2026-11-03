@@ -225,6 +225,44 @@ table.items select { min-width: 220px; }
 .how-none { color: var(--absent); }
 .tnote { border-left: 4px solid var(--absent); background: var(--absent-bg); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; font-size: .92rem; }
 .tnote ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 720px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { background: var(--bg); border-radius: 8px; padding: 12px; display: grid; gap: 4px; }
+.stat b { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.bar { height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+svg.trend { display: block; max-width: none; }
+.trend .axis { stroke: var(--line); stroke-width: 1; }
+.trend .tv { fill: var(--ink); font-size: 12px; font-weight: 700; }
+.trend .tl { fill: var(--muted); font-size: 11px; }
+.trend .b1 { fill: var(--absent); } .trend .b2 { fill: var(--late); } .trend .b3 { fill: var(--excused); } .trend .b4 { fill: var(--present); }
+.urow td { background: var(--soft); font-weight: 700; }
+.map tr.open > td { background: var(--soft); }
+.map .detail > td { background: var(--bg); }
+.ghostchip { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+table.heat { border-collapse: separate; border-spacing: 0; font-size: .92rem; }
+.heat th, .heat td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.heat thead th { color: var(--muted); font-weight: 600; vertical-align: bottom; }
+.heat th:first-child, .heat tbody th { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; white-space: normal; min-width: 12em; font-weight: 600; }
+.heat .sub td, .heat .sub th { color: var(--muted); font-size: .85rem; }
+.heat .urow td { text-align: left; }
+.dot { color: var(--accent); font-size: 1.1rem; }
+.rec.done { border-left: 6px solid var(--present); }
+.rec.todo { border-left: 6px solid var(--absent); }
+table.tgrid { border-collapse: separate; border-spacing: 4px; font-size: .9rem; min-width: 640px; width: 100%; }
+.tgrid th { color: var(--muted); font-weight: 600; text-align: left; white-space: nowrap; }
+.tgrid td { vertical-align: top; background: var(--bg); border-radius: 8px; padding: 0; min-width: 110px; }
+.tgrid td.sel { outline: 2px solid var(--accent); }
+.tgrid td.clash { background: var(--absent-bg); }
+.tgrid td > .tchip { margin: 4px; }
+.tcell { width: 100%; min-height: 52px; border: 0; background: transparent; cursor: pointer; text-align: left; padding: 4px; display: grid; gap: 4px; align-content: start; }
+.tchip { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font-weight: 600; line-height: 1.25; }
+.tchip small { font-weight: 400; font-size: .8rem; }
+.tchip.cont { color: var(--muted); font-weight: 400; border-style: dashed; }
+.wk { display: inline-block; font-size: .72rem; background: var(--soft); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+.tentry { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.tentry summary { cursor: pointer; color: var(--muted); }
+.tboxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0 8px; }
 
 #toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 140%);
@@ -264,7 +302,7 @@ const S = {
   tab: 'lessons', year: currentYear(), classes: [], courses: [], objCache: {},
   L: null, students: [], objectives: [], recent: [],
   classView: null, courseView: null, importPreview: null, coursePreview: null, authMode: 'login',
-  X: null, AN: null, CM: null,
+  X: null, AN: null, CM: null, KM: null, TT: null, TE: null, today: [],
 };
 
 // ---------- Yardımcılar ----------
@@ -453,7 +491,7 @@ async function openSchool(id) {
   S.schoolId = id;
   S.role = (S.memberships.find(m => m.school_id === id) || {}).role;
   keep('school', id);
-  S.objCache = {}; S.L = null; S.X = null; S.AN = null; S.CM = null; S.classView = null; S.courseView = null; S.importPreview = null; S.coursePreview = null;
+  S.objCache = {}; S.L = null; S.X = null; S.AN = null; S.CM = null; S.KM = null; S.TT = null; S.TE = null; S.classView = null; S.courseView = null; S.importPreview = null; S.coursePreview = null;
   await Promise.all([loadClasses(), loadCourses()]);
   renderShell();
 }
@@ -479,8 +517,8 @@ async function getObjectives(courseId) {
 const yearClasses = () => S.classes.filter(c => c.academic_year === S.year);
 
 function renderShell() {
-  const tabs = [['lessons', 'Ders ve yoklama'], ['exams', 'Sınavlar'], ['analysis', 'Analiz'], ['comments', 'Yorumlar'], ['classes', 'Sınıflar'], ['courses', 'Dersler']];
-  if (isAdmin()) tabs.push(['school', 'Okul']);
+  const tabs = [['lessons', 'Ders ve yoklama'], ['exams', 'Sınavlar'], ['analysis', 'Analiz'], ['map', 'Kazanımlar'], ['comments', 'Yorumlar'], ['classes', 'Sınıflar'], ['courses', 'Dersler']];
+  if (isAdmin()) tabs.push(['timetable', 'Program'], ['school', 'Okul']);
   if (!tabs.some(t => t[0] === S.tab)) S.tab = 'lessons';
   app.innerHTML = `${topBar()}
     <nav class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${S.tab === k}" data-tab="${k}">${l}</button>`).join('')}</nav>
@@ -496,7 +534,7 @@ function renderShell() {
       renderShell();
     };
   });
-  ({ lessons: viewLessons, exams: viewExams, analysis: viewAnalysis, comments: viewComments, classes: viewClasses, courses: viewCourses, school: viewSchool })[S.tab]();
+  ({ lessons: viewLessons, exams: viewExams, analysis: viewAnalysis, map: viewMap, comments: viewComments, classes: viewClasses, courses: viewCourses, timetable: viewTimetable, school: viewSchool })[S.tab]();
 }
 
 // ---------- Ders ve yoklama ----------
@@ -543,23 +581,38 @@ async function viewLessons() {
 async function loadLesson() {
   const L = S.L;
   view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
-  const [st, ls, rc] = await Promise.all([
+  if (!S.TT) await loadMyTimetable();
+  const mine = mySlotsOn(L.date);
+  const [st, ls, rc, td] = await Promise.all([
     sb.from('students').select('id, full_name, school_no').eq('class_id', L.classId).eq('active', true),
-    sb.from('lessons').select('id, course_id, topic').eq('class_id', L.classId).eq('lesson_date', L.date).eq('period', L.period).maybeSingle(),
+    sb.from('lessons').select('id, course_id, topic').eq('class_id', L.classId).eq('lesson_date', L.date).eq('period', L.period),
     sb.from('lessons').select('id, course_id, lesson_date, period, topic').eq('class_id', L.classId)
-      .order('lesson_date', { ascending: false }).order('period', { ascending: false }).limit(8),
+      .order('lesson_date', { ascending: false }).order('period', { ascending: false }).limit(10),
+    mine.length
+      ? sb.from('lessons').select('class_id, period, course_id').eq('lesson_date', L.date).in('class_id', [...new Set(mine.map(s => s.class_id))])
+      : Promise.resolve({ data: [], error: null }),
   ]);
-  if (fail(st.error, 'Öğrenciler') || fail(ls.error, 'Ders') || fail(rc.error, 'Son dersler')) return;
+  if (fail(st.error, 'Öğrenciler') || fail(ls.error, 'Ders') || fail(rc.error, 'Son dersler') || fail(td.error, 'Bugünkü dersler')) return;
   S.students = (st.data || []).sort(byNo);
-  L.att = new Map(); L.objectives = new Set(); L.lessonId = null; L.topic = ''; L.dirty = false;
-  if (ls.data) {
-    L.lessonId = ls.data.id; L.courseId = ls.data.course_id; L.topic = ls.data.topic || '';
+  S.today = mine.map(s => ({ ...s, done: td.data.some(l => l.class_id === s.class_id && l.period === s.period && l.course_id === s.course_id) }));
+  L.att = new Map(); L.objectives = new Set(); L.lessonId = null; L.topic = ''; L.dirty = false; L.siblings = []; L.attFrom = null;
+  const here = ls.data || [];
+  if (!L.courseId && here.length) L.courseId = here[0].course_id;
+  const cur = here.find(l => l.course_id === L.courseId);
+  L.siblings = here.filter(l => l !== cur);
+  if (cur) {
+    L.lessonId = cur.id; L.topic = cur.topic || '';
     const [lo, at] = await Promise.all([
       sb.from('lesson_objectives').select('objective_id').eq('lesson_id', L.lessonId),
       sb.from('attendance').select('student_id, status').eq('lesson_id', L.lessonId),
     ]);
     (lo.data || []).forEach(r => L.objectives.add(r.objective_id));
     (at.data || []).forEach(r => L.att.set(r.student_id, r.status));
+  } else if (L.siblings.length) {
+    // Aynı saatteki başka dersin yoklaması varsa onu getir (ortak yoklama)
+    const { data } = await sb.from('attendance').select('student_id, status').eq('lesson_id', L.siblings[0].id);
+    (data || []).forEach(r => L.att.set(r.student_id, r.status));
+    if ((data || []).length) L.attFrom = L.siblings[0].course_id;
   }
   S.recent = rc.data || [];
   if (S.recent.length) {
@@ -573,6 +626,22 @@ async function loadLesson() {
   keep('lesson_' + S.schoolId, { classId: L.classId, courseId: L.courseId, period: L.period });
   drawLesson();
 }
+
+function todayHtml() {
+  if (!S.today.length) {
+    return S.TT && S.TT.slots.length ? `<section class="panel"><h2>${L_DAYNAME()} derslerim</h2><p class="muted">Bu gün programında ders yok.</p></section>` : '';
+  }
+  const L = S.L;
+  return `<section class="panel"><div class="head"><h2>${L_DAYNAME()} derslerim</h2><span class="muted">${S.today.filter(s => s.done).length}/${S.today.length} kaydedildi</span></div>
+    <ul class="recent">${S.today.map(s => {
+      const cur = s.class_id === L.classId && s.period === Number(L.period) && s.course_id === L.courseId;
+      return `<li><button type="button" class="rec ${s.done ? 'done' : 'todo'} ${cur ? 'cur' : ''}" data-tclass="${s.class_id}" data-tcourse="${s.course_id}" data-tperiod="${s.period}">
+        <span>${periodLabel(s.period, s.length)}, ${esc(className(s.class_id))}</span>
+        <span class="muted">${esc(courseTitle(s.course_id))}</span>
+        <span class="miss">${s.done ? 'Kaydedildi' : 'Bekliyor'}</span></button></li>`;
+    }).join('')}</ul></section>`;
+}
+function L_DAYNAME() { return S.L.date === today() ? 'Bugünkü' : DAYS[isoWeekday(S.L.date)] + ' günkü'; }
 
 function groupUnits(objs) {
   const out = [];
@@ -613,8 +682,8 @@ function recentHtml() {
   return `<section class="panel"><h2>Bu sınıfın son dersleri</h2><ul class="recent">${S.recent.map(r => {
     const c = S.courses.find(x => x.id === r.course_id);
     const miss = r.cnt.absent + r.cnt.excused;
-    const cur = r.lesson_date === S.L.date && Number(r.period) === Number(S.L.period);
-    return `<li><button type="button" class="rec ${cur ? 'cur' : ''}" data-date="${r.lesson_date}" data-period="${r.period}">
+    const cur = r.lesson_date === S.L.date && Number(r.period) === Number(S.L.period) && r.course_id === S.L.courseId;
+    return `<li><button type="button" class="rec ${cur ? 'cur' : ''}" data-date="${r.lesson_date}" data-period="${r.period}" data-course="${r.course_id}">
       <span>${fmtDate(r.lesson_date)}, ${r.period}. ders</span>
       <span class="muted">${esc(c ? c.title : '')}${r.topic ? ', ' + esc(r.topic) : ''}</span>
       <span class="miss">${miss ? miss + ' devamsız' : 'Tam katılım'}</span>
@@ -630,7 +699,8 @@ function drawLesson() {
     if (c) list.unshift(c);
   }
   const units = groupUnits(S.objectives);
-  view().innerHTML = `
+  const sibNames = L.siblings.map(l => courseTitle(l.course_id)).filter(Boolean);
+  view().innerHTML = `${todayHtml()}
   <section class="panel">
     <div class="grid4">
       <label class="field">Sınıf<select id="lClass">${yearClasses().map(c => opt(c.id, c.name, L.classId)).join('')}</select></label>
@@ -639,6 +709,7 @@ function drawLesson() {
       <label class="field">Ders saati<select id="lPeriod">${Array.from({ length: 10 }, (_, i) => opt(i + 1, (i + 1) + '. ders', L.period)).join('')}</select></label>
     </div>
     <p class="state ${L.lessonId ? 'saved' : ''}">${L.lessonId ? 'Bu ders kayıtlı. Değişiklik yapıp yeniden kaydedebilirsin.' : 'Bu ders için henüz kayıt yok.'}</p>
+    ${sibNames.length ? `<p class="note">Bu sınıfta aynı saatte ${esc(sibNames.join(', '))} dersi de kayıtlı. Yoklama ortak: kaydettiğinde ${sibNames.length > 1 ? 'o derslere' : 'o derse'} de yansır.${L.attFrom ? ' Yoklama oradan getirildi.' : ''}</p>` : ''}
   </section>
 
   <section class="panel">
@@ -669,13 +740,7 @@ function drawLesson() {
   $('#lClass').onchange = e => guard(() => { L.classId = e.target.value; L.courseId = pickCourse(L.classId, L.courseId); loadLesson(); }, () => { e.target.value = L.classId; });
   $('#lDate').onchange = e => { if (!e.target.value) return; guard(() => { L.date = e.target.value; loadLesson(); }, () => { e.target.value = L.date; }); };
   $('#lPeriod').onchange = e => guard(() => { L.period = Number(e.target.value); loadLesson(); }, () => { e.target.value = L.period; });
-  $('#lCourse').onchange = async e => {
-    L.courseId = e.target.value;
-    L.objectives = new Set();
-    L.dirty = true;
-    S.objectives = await getObjectives(L.courseId);
-    drawLesson();
-  };
+  $('#lCourse').onchange = e => guard(() => { L.courseId = e.target.value; loadLesson(); }, () => { e.target.value = L.courseId; });
   view().querySelectorAll('[data-obj]').forEach(cb => {
     cb.onchange = () => { if (cb.checked) L.objectives.add(cb.dataset.obj); else L.objectives.delete(cb.dataset.obj); L.dirty = true; updateCounts(); };
   });
@@ -699,8 +764,11 @@ function drawLesson() {
   $('#saveLesson').onclick = saveLesson;
   const del = $('#delLesson');
   if (del) del.onclick = deleteLesson;
-  view().querySelectorAll('.rec').forEach(b => {
-    b.onclick = () => guard(() => { L.date = b.dataset.date; L.period = Number(b.dataset.period); loadLesson(); });
+  view().querySelectorAll('.rec[data-date]').forEach(b => {
+    b.onclick = () => guard(() => { L.date = b.dataset.date; L.period = Number(b.dataset.period); L.courseId = b.dataset.course; loadLesson(); });
+  });
+  view().querySelectorAll('.rec[data-tclass]').forEach(b => {
+    b.onclick = () => guard(() => { L.classId = b.dataset.tclass; L.courseId = b.dataset.tcourse; L.period = Number(b.dataset.tperiod); loadLesson(); });
   });
 }
 
@@ -719,7 +787,7 @@ async function saveLesson() {
         school_id: S.schoolId, class_id: L.classId, course_id: L.courseId,
         lesson_date: L.date, period: Number(L.period), topic: L.topic.trim(),
       }).select('id').single();
-      if (error && error.code === '23505') { toast('Bu sınıf için bu saatte başka bir ders kaydı var. Sayfayı yenile.', true); return; }
+      if (error && error.code === '23505') { toast('Bu ders için bu saatte zaten bir kayıt var. Sayfayı yenile.', true); return; }
       if (fail(error, 'Ders kaydedilemedi')) return;
       id = data.id;
     }
@@ -735,9 +803,15 @@ async function saveLesson() {
         S.students.map(s => ({ lesson_id: id, student_id: s.id, school_id: S.schoolId, status: L.att.get(s.id) || 'present' })),
         { onConflict: 'lesson_id,student_id' });
       if (fail(error, 'Yoklama')) return;
+      if (L.siblings.length) {
+        const rows = [];
+        L.siblings.forEach(sib => S.students.forEach(s => rows.push({ lesson_id: sib.id, student_id: s.id, school_id: S.schoolId, status: L.att.get(s.id) || 'present' })));
+        const { error: e2 } = await sb.from('attendance').upsert(rows, { onConflict: 'lesson_id,student_id' });
+        if (fail(e2, 'Ortak yoklama')) return;
+      }
     }
     L.dirty = false;
-    toast('Ders kaydedildi.');
+    toast(L.siblings.length ? 'Ders kaydedildi. Yoklama aynı saatteki derse de yansıtıldı.' : 'Ders kaydedildi.');
     await loadLesson();
   } finally {
     const b = $('#saveLesson');
@@ -2397,6 +2471,562 @@ async function saveNote(sid, text) {
   fail(error, 'Not kaydedilemedi');
 }
 
+// ---------- Kazanım haritası ----------
+const pctLv = p => p == null ? 0 : Math.max(1, Math.min(4, Math.ceil(testLevel(p, 5) / 5 * 4)));
+const shortDate = d => new Date(d + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+const avgOf = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+
+async function viewMap() {
+  const cls = yearClasses();
+  if (!cls.length || !S.courses.length) {
+    view().innerHTML = empty('Kazanım haritası için önce sınıf listesi ve dersler eklenmeli.');
+    return;
+  }
+  if (!S.KM || !cls.some(c => c.id === S.KM.classId)) {
+    const last = restore('km_' + S.schoolId, {});
+    const classId = (cls.find(c => c.id === last.classId) || cls[0]).id;
+    S.KM = { classId, courseId: pickCourse(classId, last.courseId), mode: last.mode || 'overall', unit: 'all', open: null, d: null };
+  }
+  await loadMap();
+}
+
+async function loadMap() {
+  const KM = S.KM;
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  if (!KM.courseId) { KM.d = null; drawMap(); return; }
+  const objs = await getObjectives(KM.courseId);
+  const [st, ls, ac] = await Promise.all([
+    sb.from('students').select('id, full_name, school_no').eq('class_id', KM.classId).eq('active', true),
+    fetchAll(() => sb.from('lessons').select('id, lesson_date, period, topic').eq('class_id', KM.classId).eq('course_id', KM.courseId)
+      .order('lesson_date').order('period')),
+    fetchAll(() => sb.from('assessment_classes').select('assessment_id, given_on').eq('class_id', KM.classId)),
+  ]);
+  if (fail(st.error, 'Öğrenciler') || fail(ls.error, 'Dersler') || fail(ac.error, 'Sınavlar')) return;
+  const students = (st.data || []).sort(byNo);
+  const sids = students.map(s => s.id);
+  const lessons = ls.data.map(l => ({ ...l, objs: new Set(), absent: new Set() }));
+  const lessonById = new Map(lessons.map(l => [l.id, l]));
+  for (const part of chunks(lessons.map(l => l.id), 150)) {
+    const [lo, at] = await Promise.all([
+      fetchAll(() => sb.from('lesson_objectives').select('lesson_id, objective_id').in('lesson_id', part)),
+      fetchAll(() => sb.from('attendance').select('lesson_id, student_id, status').in('lesson_id', part).in('status', ['absent', 'excused'])),
+    ]);
+    if (fail(lo.error, 'Ders kazanımları') || fail(at.error, 'Yoklama')) return;
+    lo.data.forEach(r => { const l = lessonById.get(r.lesson_id); if (l) l.objs.add(r.objective_id); });
+    at.data.forEach(r => { const l = lessonById.get(r.lesson_id); if (l) l.absent.add(r.student_id); });
+  }
+
+  // Bu sınıfa uygulanmış, bu derse ait sınavlar
+  const givenOn = new Map(ac.data.map(r => [r.assessment_id, r.given_on]));
+  let exams = [];
+  if (givenOn.size) {
+    const { data, error } = await fetchAll(() => sb.from('assessments').select('id, title, kind').in('id', [...givenOn.keys()]).eq('course_id', KM.courseId));
+    if (fail(error, 'Sınavlar')) return;
+    exams = data.map(a => ({ ...a, given_on: givenOn.get(a.id), items: [] })).sort((a, b) => a.given_on.localeCompare(b.given_on));
+  }
+  const examById = new Map(exams.map(e => [e.id, e]));
+  let items = [];
+  if (exams.length) {
+    const { data, error } = await fetchAll(() => sb.from('assessment_items').select('id, assessment_id, objective_id, max_points').in('assessment_id', exams.map(e => e.id)));
+    if (fail(error, 'Sorular')) return;
+    items = data.map(i => ({ ...i, max_points: Number(i.max_points) }));
+    items.forEach(i => examById.get(i.assessment_id).items.push(i));
+  }
+  const pts = new Map();
+  if (items.length && sids.length) {
+    for (const part of chunks(items.map(i => i.id), 150)) {
+      const { data, error } = await fetchAll(() => sb.from('item_results').select('item_id, student_id, points').in('item_id', part).in('student_id', sids));
+      if (fail(error, 'Sonuçlar')) return;
+      data.forEach(r => pts.set(r.student_id + '|' + r.item_id, Number(r.points)));
+    }
+  }
+  const rub = new Map();
+  if (sids.length && objs.length) {
+    const { data, error } = await fetchAll(() => sb.from('rubric_scores').select('student_id, objective_id, score').in('student_id', sids).in('objective_id', objs.map(o => o.id)));
+    if (fail(error, 'Rubrik puanları')) return;
+    data.forEach(r => { if (Number(r.score) >= 1) rub.set(r.student_id + '|' + r.objective_id, Number(r.score)); });
+  }
+
+  // Hesaplamalar
+  const examObj = {};
+  exams.forEach(e => {
+    const takers = students.filter(s => e.items.some(i => pts.has(s.id + '|' + i.id)));
+    e.takers = takers.length;
+    e.avg = avgOf(takers.map(s => {
+      let g = 0, m = 0;
+      e.items.forEach(i => { m += i.max_points; g += pts.get(s.id + '|' + i.id) || 0; });
+      return m ? g / m : 0;
+    }));
+    examObj[e.id] = {};
+    const byObj = {};
+    e.items.forEach(i => { (byObj[i.objective_id] = byObj[i.objective_id] || []).push(i); });
+    Object.entries(byObj).forEach(([oid, its]) => {
+      const vals = takers.map(s => {
+        let g = 0, m = 0;
+        its.forEach(i => { m += i.max_points; g += pts.get(s.id + '|' + i.id) || 0; });
+        return m ? g / m : 0;
+      });
+      examObj[e.id][oid] = { pct: avgOf(vals), n: vals.length };
+    });
+  });
+  const stuObj = {};
+  students.forEach(s => {
+    stuObj[s.id] = {};
+    objs.forEach(o => {
+      let g = 0, m = 0;
+      exams.forEach(e => {
+        if (!e.items.some(i => pts.has(s.id + '|' + i.id))) return;
+        e.items.filter(i => i.objective_id === o.id).forEach(i => { m += i.max_points; g += pts.get(s.id + '|' + i.id) || 0; });
+      });
+      if (m) stuObj[s.id][o.id] = g / m;
+    });
+  });
+  const objStats = {};
+  objs.forEach(o => {
+    const taught = lessons.filter(l => l.objs.has(o.id));
+    const tv = students.map(s => stuObj[s.id][o.id]).filter(v => v != null);
+    const rv = students.map(s => rub.get(s.id + '|' + o.id)).filter(v => v != null);
+    objStats[o.id] = { taught, test: avgOf(tv), testN: tv.length, rubric: avgOf(rv), rubricN: rv.length };
+  });
+  KM.d = { objs, students, lessons, exams, examObj, stuObj, rub, objStats, mx: scaleMax(S.courses.find(c => c.id === KM.courseId) || {}) };
+  keep('km_' + S.schoolId, { classId: KM.classId, courseId: KM.courseId, mode: KM.mode });
+  drawMap();
+}
+
+function mapStatus(st) {
+  if (st.test != null) return `<span class="chip l${pctLv(st.test)}">%${Math.round(st.test * 100)}</span>${st.taught.length ? '' : ' <small>Ders kaydı yok</small>'}`;
+  if (st.taught.length) return `<span class="chip">İşlendi, ölçülmedi</span>`;
+  return `<span class="chip ghostchip">Henüz işlenmedi</span>`;
+}
+
+function trendSvg(exams) {
+  const list = exams.filter(e => e.avg != null);
+  if (!list.length) return '';
+  const W = Math.max(320, list.length * 72), H = 170, top = 18, base = 120;
+  const bw = Math.min(44, (W - 20) / list.length - 16);
+  const bars = list.map((e, i) => {
+    const x = 10 + i * ((W - 20) / list.length) + ((W - 20) / list.length - bw) / 2;
+    const h = Math.round(e.avg * (base - top));
+    return `<g><title>${esc(e.title)}: %${Math.round(e.avg * 100)} (${e.takers} öğrenci)</title>
+      <rect class="b${pctLv(e.avg)}" x="${x}" y="${base - h}" width="${bw}" height="${h}" rx="4"></rect>
+      <text class="tv" x="${x + bw / 2}" y="${base - h - 5}" text-anchor="middle">%${Math.round(e.avg * 100)}</text>
+      <text class="tl" x="${x + bw / 2}" y="${base + 16}" text-anchor="middle">${esc(shortDate(e.given_on))}</text>
+      <text class="tl" x="${x + bw / 2}" y="${base + 30}" text-anchor="middle">${esc(e.title.length > 12 ? e.title.slice(0, 11) + '…' : e.title)}</text></g>`;
+  }).join('');
+  return `<div class="scroll"><svg class="trend" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Sınav ve quizlerde sınıf ortalaması">
+    <line class="axis" x1="6" x2="${W - 6}" y1="${base}" y2="${base}"></line>${bars}</svg></div>`;
+}
+
+function drawMap() {
+  const KM = S.KM, d = KM.d;
+  const head = `<section class="panel">
+    <div class="grid4">
+      <label class="field">Sınıf<select id="mClass">${yearClasses().map(c => opt(c.id, c.name, KM.classId)).join('')}</select></label>
+      <label class="field">Ders<select id="mCourse">${coursesFor(KM.classId).map(c => opt(c.id, c.title, KM.courseId)).join('')}</select></label>
+      <label class="field">Ünite<select id="mUnit">${opt('all', 'Tüm üniteler', KM.unit)}${d ? groupUnits(d.objs).map(u => opt(u.name, u.name || 'Ünite', KM.unit)).join('') : ''}</select></label>
+      <div class="field">Görünüm<div class="seg" role="group" aria-label="Görünüm">
+        ${[['overall', 'Genel'], ['lessons', 'Dersler'], ['exams', 'Sınavlar']].map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${KM.mode === k}">${l}</button>`).join('')}
+      </div></div>
+    </div>
+  </section>`;
+  if (!d) { view().innerHTML = head + empty('Bu sınıf için ders bulunamadı.'); bindMap(); return; }
+  const objs = KM.unit === 'all' ? d.objs : d.objs.filter(o => o.unit === KM.unit);
+  const units = groupUnits(objs);
+  let body = '';
+
+  if (KM.mode === 'overall') {
+    const st = objs.map(o => d.objStats[o.id]);
+    const taughtN = st.filter(s => s.taught.length).length;
+    const testedN = st.filter(s => s.test != null).length;
+    const testAvg = avgOf(st.filter(s => s.test != null).map(s => s.test));
+    const rubAvg = avgOf(st.filter(s => s.rubric != null).map(s => s.rubric));
+    const exams = d.exams.filter(e => e.items.some(i => objs.some(o => o.id === i.objective_id)));
+    body = `<section class="panel">
+      <div class="stats">
+        <div class="stat"><span class="muted">İşlenen kazanım</span><b>${taughtN}/${objs.length}</b><div class="bar"><i style="width:${objs.length ? taughtN / objs.length * 100 : 0}%"></i></div></div>
+        <div class="stat"><span class="muted">Sınavla ölçülen</span><b>${testedN}/${objs.length}</b><div class="bar"><i style="width:${objs.length ? testedN / objs.length * 100 : 0}%"></i></div></div>
+        <div class="stat"><span class="muted">Sınav başarısı (ort.)</span><b>${testAvg == null ? '–' : '%' + Math.round(testAvg * 100)}</b></div>
+        <div class="stat"><span class="muted">Rubrik (ort.)</span><b>${rubAvg == null ? '–' : rubAvg.toFixed(1).replace('.', ',') + ' / ' + d.mx}</b></div>
+      </div>
+      ${exams.length ? `<h2>Sınav ve quizlerde sınıf ortalaması</h2>${trendSvg(exams)}` : `<p class="muted">Bu kapsamda bu sınıfa uygulanmış sınav ya da quiz yok.</p>`}
+    </section>
+    <section class="panel">
+      <h2>Kazanımlar</h2>
+      <p class="muted explain">Ayrıntı için kazanıma dokun: öğrenci öğrenci sınav başarısı, rubrik puanı ve kaçırılan dersler görünür. Renkler sonuç yorumundaki eşiklerle aynı: %90, %70, %50 ve %30.</p>
+      <div class="scroll"><table class="list map"><thead><tr><th>Kazanım</th><th>İşlendiği ders</th><th>Sınav</th><th>Rubrik</th><th>Durum</th></tr></thead><tbody>
+      ${units.map(u => `<tr class="urow"><td colspan="5">${esc(u.name || 'Ünite')}</td></tr>` + u.items.map(o => {
+        const s = d.objStats[o.id];
+        const open = KM.open === o.id;
+        let detail = '';
+        if (open) {
+          const rows = d.students.map(stu => {
+            const missed = s.taught.filter(l => l.absent.has(stu.id)).length;
+            return { stu, pct: d.stuObj[stu.id][o.id], r: d.rub.get(stu.id + '|' + o.id), missed };
+          }).sort((a, b) => (a.pct == null) - (b.pct == null) || (a.pct ?? 0) - (b.pct ?? 0) || byNo(a.stu, b.stu));
+          detail = `<tr class="detail"><td colspan="5"><table class="list"><thead><tr><th>Öğrenci</th><th>Sınav</th><th>Rubrik</th><th>Kaçırdığı ders</th></tr></thead><tbody>
+            ${rows.map(r => `<tr><td>${esc(r.stu.full_name)}</td><td>${r.pct == null ? '–' : `<span class="chip l${pctLv(r.pct)}">%${Math.round(r.pct * 100)}</span>`}</td>
+              <td>${r.r == null ? '–' : r.r + ' / ' + d.mx}</td><td>${s.taught.length ? `${r.missed}/${s.taught.length}` : '–'}</td></tr>`).join('')}
+          </tbody></table></td></tr>`;
+        }
+        return `<tr class="${open ? 'open' : ''}"><td><button type="button" class="link" data-obj="${o.id}">${esc(o.label)}</button></td>
+          <td>${s.taught.length ? `${s.taught.length} ders<small>son: ${esc(shortDate(s.taught[s.taught.length - 1].lesson_date))}</small>` : '–'}</td>
+          <td>${s.test == null ? '–' : `%${Math.round(s.test * 100)}<small>${s.testN} öğrenci</small>`}</td>
+          <td>${s.rubric == null ? '–' : `${s.rubric.toFixed(1).replace('.', ',')}<small>${s.rubricN} öğrenci</small>`}</td>
+          <td>${mapStatus(s)}</td></tr>${detail}`;
+      }).join('')).join('')}
+      </tbody></table></div>
+    </section>`;
+  } else if (KM.mode === 'lessons') {
+    const lessons = d.lessons.filter(l => objs.some(o => l.objs.has(o.id)) || KM.unit === 'all');
+    body = lessons.length ? `<section class="panel">
+      <h2>Ders kayıtları ve işlenen kazanımlar</h2>
+      <p class="muted explain">Her sütun bir ders kaydı. Nokta, o kazanımın o derste işlendiğini gösterir. Üst satırda o derse katılmayan öğrenci sayısı yazar.</p>
+      <div class="scroll"><table class="heat"><thead>
+        <tr><th>Kazanım</th>${lessons.map(l => `<th title="${esc(l.topic || '')}">${esc(shortDate(l.lesson_date))}<small>${l.period}. ders</small></th>`).join('')}<th>Toplam</th></tr>
+        <tr class="sub"><th>Devamsız</th>${lessons.map(l => `<td>${l.absent.size || ''}</td>`).join('')}<td></td></tr>
+      </thead><tbody>
+      ${units.map(u => `<tr class="urow"><td colspan="${lessons.length + 2}">${esc(u.name || 'Ünite')}</td></tr>` + u.items.map(o => {
+        const n = lessons.filter(l => l.objs.has(o.id)).length;
+        return `<tr><th scope="row">${esc(o.label)}</th>${lessons.map(l => `<td>${l.objs.has(o.id) ? '<span class="dot" aria-label="işlendi">●</span>' : ''}</td>`).join('')}<td><b>${n || ''}</b></td></tr>`;
+      }).join('')).join('')}
+      </tbody></table></div>
+    </section>` : empty('Bu kapsamda ders kaydı yok. Ders ve yoklama sekmesinde ders kaydederken işlenen kazanımları işaretlediğinde burada görünür.');
+  } else {
+    const exams = d.exams.filter(e => e.items.some(i => objs.some(o => o.id === i.objective_id)));
+    body = exams.length ? `<section class="panel">
+      <h2>Sınav ve quizlerde kazanım başarısı</h2>
+      <p class="muted explain">Her sütun bu sınıfa uygulanmış bir sınav ya da quiz. Hücrede, o sınavda o kazanımı ölçen sorulardaki sınıf ortalaması yazar. Boş hücre, o sınavın bu kazanımı ölçmediği anlamına gelir.</p>
+      <div class="scroll"><table class="heat"><thead>
+        <tr><th>Kazanım</th>${exams.map(e => `<th title="${esc(e.title)}">${esc(e.title.length > 14 ? e.title.slice(0, 13) + '…' : e.title)}<small>${esc(shortDate(e.given_on))}, ${KINDS[e.kind] || ''}</small></th>`).join('')}<th>Genel</th></tr>
+        <tr class="sub"><th>Sınav ortalaması</th>${exams.map(e => `<td>${e.avg == null ? '–' : `<span class="chip l${pctLv(e.avg)}">%${Math.round(e.avg * 100)}</span>`}</td>`).join('')}<td></td></tr>
+      </thead><tbody>
+      ${units.map(u => `<tr class="urow"><td colspan="${exams.length + 2}">${esc(u.name || 'Ünite')}</td></tr>` + u.items.map(o => {
+        const g = d.objStats[o.id].test;
+        return `<tr><th scope="row">${esc(o.label)}</th>${exams.map(e => {
+          const c = d.examObj[e.id][o.id];
+          return `<td>${c && c.pct != null ? `<span class="chip l${pctLv(c.pct)}">%${Math.round(c.pct * 100)}</span>` : ''}</td>`;
+        }).join('')}<td>${g == null ? '' : `<b>%${Math.round(g * 100)}</b>`}</td></tr>`;
+      }).join('')).join('')}
+      </tbody></table></div>
+    </section>` : empty('Bu kapsamda bu sınıfa uygulanmış sınav ya da quiz yok.');
+  }
+  view().innerHTML = head + body;
+  bindMap();
+}
+
+function bindMap() {
+  const KM = S.KM;
+  $('#mClass').onchange = e => { KM.classId = e.target.value; KM.courseId = pickCourse(KM.classId, KM.courseId); KM.unit = 'all'; KM.open = null; loadMap(); };
+  $('#mCourse').onchange = e => { KM.courseId = e.target.value; KM.unit = 'all'; KM.open = null; loadMap(); };
+  $('#mUnit').onchange = e => { KM.unit = e.target.value; KM.open = null; drawMap(); };
+  view().querySelectorAll('[data-mode]').forEach(b => {
+    b.onclick = () => { KM.mode = b.dataset.mode; keep('km_' + S.schoolId, { classId: KM.classId, courseId: KM.courseId, mode: KM.mode }); drawMap(); };
+  });
+  view().querySelectorAll('[data-obj]').forEach(b => {
+    b.onclick = () => { KM.open = KM.open === b.dataset.obj ? null : b.dataset.obj; drawMap(); };
+  });
+}
+
+// ---------- Ders programı ----------
+const DAYS = ['', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+const DAY_SHORT = ['', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+function isoWeekday(dateStr) { const d = new Date(dateStr + 'T12:00:00'); return ((d.getDay() + 6) % 7) + 1; }
+function mondayOf(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate() - (isoWeekday(dateStr) - 1)); return d; }
+function weekType(ver, dateStr) {
+  if (!ver || !ver.ab_weeks || !ver.a_week_start) return null;
+  const diff = Math.round((mondayOf(dateStr) - mondayOf(ver.a_week_start)) / (7 * 864e5));
+  return ((diff % 2) + 2) % 2 === 0 ? 'A' : 'B';
+}
+function versionFor(versions, dateStr) {
+  return versions.filter(v => v.valid_from <= dateStr).sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0] || null;
+}
+const periodLabel = (p, len) => len > 1 ? `${p}.–${p + len - 1}. ders` : `${p}. ders`;
+const longDate = d => new Date(d + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+const courseTitle = id => (S.courses.find(c => c.id === id) || {}).title || '';
+const className = id => (S.classes.find(c => c.id === id) || {}).name || '';
+
+// Öğretmenin kendi programı ("Bu günün derslerim" için)
+async function loadMyTimetable() {
+  S.TT = { versions: [], slots: [] };
+  const [vs, tt] = await Promise.all([
+    sb.from('timetable_versions').select('id, name, valid_from, ab_weeks, a_week_start').eq('school_id', S.schoolId),
+    fetchAll(() => sb.from('timetable_teachers').select('slot_id').eq('school_id', S.schoolId).eq('user_id', S.user.id)),
+  ]);
+  if (vs.error || tt.error) return;
+  S.TT.versions = vs.data || [];
+  for (const part of chunks(tt.data.map(r => r.slot_id), 150)) {
+    const { data, error } = await sb.from('timetable_slots').select('id, version_id, class_id, course_id, weekday, period, length, week').in('id', part);
+    if (!error) S.TT.slots.push(...data);
+  }
+}
+function mySlotsOn(dateStr) {
+  if (!S.TT) return [];
+  const ver = versionFor(S.TT.versions, dateStr);
+  if (!ver) return [];
+  const wd = isoWeekday(dateStr), wt = weekType(ver, dateStr);
+  const ok = new Set(yearClasses().map(c => c.id));
+  return S.TT.slots.filter(s => s.version_id === ver.id && s.weekday === wd && ok.has(s.class_id) && (s.week === 'all' || !wt || s.week === wt))
+    .sort((a, b) => a.period - b.period || className(a.class_id).localeCompare(className(b.class_id), 'tr', { numeric: true }));
+}
+
+// Yönetici: program düzenleme
+async function viewTimetable() {
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  const [vs, mem] = await Promise.all([
+    sb.from('timetable_versions').select('id, name, valid_from, ab_weeks, a_week_start').eq('school_id', S.schoolId).order('valid_from'),
+    sb.from('memberships').select('user_id, role').eq('school_id', S.schoolId).eq('status', 'active'),
+  ]);
+  if (vs.error) { view().innerHTML = empty('Ders programı tabloları bulunamadı. Önce veritabanı güncellemesini (SQL) çalıştırman gerekiyor.'); return; }
+  if (fail(mem.error, 'Üyeler')) return;
+  const ids = mem.data.map(m => m.user_id);
+  let profs = [];
+  if (ids.length) { const r = await sb.from('profiles').select('id, full_name, email').in('id', ids); profs = r.data || []; }
+  const TE = S.TE = S.TE || { mode: 'class', cell: null, newForm: false };
+  TE.versions = vs.data || [];
+  TE.members = profs.map(p => ({ id: p.id, name: p.full_name || p.email || 'Adsız' })).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  if (!TE.versions.some(v => v.id === TE.versionId)) TE.versionId = (versionFor(TE.versions, today()) || TE.versions[TE.versions.length - 1] || {}).id || null;
+  const cls = yearClasses();
+  if (!cls.some(c => c.id === TE.classId)) TE.classId = cls[0] ? cls[0].id : null;
+  if (!TE.members.some(m => m.id === TE.teacherId)) TE.teacherId = (TE.members.find(m => m.id === S.user.id) || TE.members[0] || {}).id || null;
+  if (!TE.versions.length) TE.newForm = true;
+  await loadTTSlots();
+}
+
+async function loadTTSlots() {
+  const TE = S.TE;
+  TE.slots = []; TE.teachers = new Map();
+  if (TE.versionId) {
+    const { data, error } = await fetchAll(() => sb.from('timetable_slots').select('id, class_id, course_id, weekday, period, length, week').eq('version_id', TE.versionId));
+    if (fail(error, 'Program')) return;
+    TE.slots = data;
+    for (const part of chunks(data.map(s => s.id), 150)) {
+      const { data: tt, error: e2 } = await fetchAll(() => sb.from('timetable_teachers').select('slot_id, user_id').in('slot_id', part));
+      if (fail(e2, 'Program öğretmenleri')) return;
+      tt.forEach(r => { if (!TE.teachers.has(r.slot_id)) TE.teachers.set(r.slot_id, new Set()); TE.teachers.get(r.slot_id).add(r.user_id); });
+    }
+  }
+  drawTimetable();
+}
+
+function ttName(uid) { const m = S.TE.members.find(x => x.id === uid); return m ? m.name : 'Okuldan ayrılmış öğretmen'; }
+function teacherBoxes(name, selected) {
+  return `<div class="tboxes">${S.TE.members.map(m => `<label class="chk"><input type="checkbox" name="${name}" value="${m.id}" ${selected.has(m.id) ? 'checked' : ''}><span>${esc(m.name)}</span></label>`).join('')}</div>`;
+}
+
+function drawTimetable() {
+  const TE = S.TE;
+  const ver = TE.versions.find(v => v.id === TE.versionId);
+  const top = `<section class="panel">
+    <div class="head"><h2>Ders programı</h2>
+      <button type="button" class="btn small" id="tNew">${TE.newForm ? 'Vazgeç' : 'Yeni program'}</button></div>
+    ${TE.versions.length ? `<div class="grid3">
+      <label class="field">Program<select id="tVer">${TE.versions.map(v => opt(v.id, `${v.name || 'Program'} (${longDate(v.valid_from)} itibarıyla)`, TE.versionId)).join('')}</select></label>
+      <label class="field inline"><input type="checkbox" id="tAB" ${ver && ver.ab_weeks ? 'checked' : ''}> A/B haftası kullan</label>
+      ${ver && ver.ab_weeks ? `<label class="field">A haftası olan bir gün<input type="date" id="tAStart" value="${ver.a_week_start || ''}"></label>` : '<span></span>'}
+    </div>
+    <p class="muted explain">Bir program, başlangıç tarihinden bir sonraki programın başlangıcına kadar geçerlidir. Dönem içinde program değişirse yeni tarihle yeni bir program oluştur, eski kayıtlar etkilenmez.</p>
+    <div class="row"><button type="button" class="btn quiet small" id="tDelVer">Bu programı sil</button></div>` : ''}
+    ${TE.newForm ? `<form id="tNewForm" class="grid3 top-gap">
+      <label class="field">Ad<input name="name" placeholder="Örneğin 1. dönem" required></label>
+      <label class="field">Başlangıç tarihi<input name="valid_from" type="date" value="${today()}" required></label>
+      <div class="field">${ver ? `<label class="chk"><input type="checkbox" name="copy" checked><span>Seçili programdaki dersleri kopyala</span></label>` : ''}
+        <button class="btn primary">Programı oluştur</button></div>
+    </form>` : ''}
+  </section>`;
+  if (!ver) { view().innerHTML = top + (TE.versions.length ? '' : empty('Henüz ders programı yok. Yukarıdan ilk programı oluştur.')); bindTimetable(); return; }
+
+  const slots = TE.mode === 'class' ? TE.slots.filter(s => s.class_id === TE.classId)
+    : TE.slots.filter(s => (TE.teachers.get(s.id) || new Set()).has(TE.teacherId));
+  const days = slots.some(s => s.weekday === 6) || slots.some(s => s.weekday === 7) ? [1, 2, 3, 4, 5, 6, 7].filter(d => d <= 5 || slots.some(s => s.weekday === d)) : [1, 2, 3, 4, 5];
+  const maxP = Math.max(8, ...slots.map(s => s.period + s.length - 1));
+  const chip = s => {
+    const t = [...(TE.teachers.get(s.id) || [])].map(ttName);
+    const wk = s.week !== 'all' ? ` <span class="wk">${s.week}</span>` : '';
+    return TE.mode === 'class'
+      ? `<span class="tchip">${esc(courseTitle(s.course_id))}${wk}<small>${t.length ? esc(t.join(', ')) : 'Öğretmen yok'}</small></span>`
+      : `<span class="tchip">${esc(className(s.class_id))}${wk}<small>${esc(courseTitle(s.course_id))}</small></span>`;
+  };
+  const grid = `<section class="panel">
+    <div class="grid3">
+      <div class="field">Görünüm<div class="seg" role="group" aria-label="Görünüm">
+        <button type="button" data-tmode="class" aria-pressed="${TE.mode === 'class'}">Sınıf</button>
+        <button type="button" data-tmode="teacher" aria-pressed="${TE.mode === 'teacher'}">Öğretmen</button></div></div>
+      ${TE.mode === 'class'
+        ? `<label class="field">Sınıf<select id="tClass">${yearClasses().map(c => opt(c.id, c.name, TE.classId)).join('')}</select></label>`
+        : `<label class="field">Öğretmen<select id="tTeacher">${TE.members.map(m => opt(m.id, m.name, TE.teacherId)).join('')}</select></label>`}
+    </div>
+    <p class="muted explain">${TE.mode === 'class' ? 'Düzenlemek için bir hücreye dokun. Aynı saate birden fazla ders yazabilirsin; aynı sınıfta aynı saatteki dersler yoklamayı paylaşır.' : 'Öğretmenin haftası. Düzenlemek için sınıf görünümüne geç.'}</p>
+    <div class="scroll"><table class="tgrid"><thead><tr><th></th>${days.map(d => `<th>${DAYS[d]}</th>`).join('')}</tr></thead><tbody>
+    ${Array.from({ length: maxP }, (_, i) => i + 1).map(p => `<tr><th scope="row">${p}. ders</th>${days.map(d => {
+      const starts = slots.filter(s => s.weekday === d && s.period === p);
+      const conts = slots.filter(s => s.weekday === d && s.period < p && s.period + s.length - 1 >= p);
+      const clash = TE.mode === 'teacher' && starts.length + conts.length > 1 && new Set([...starts, ...conts].map(s => s.class_id)).size > 1;
+      const sel = TE.cell && TE.cell.day === d && TE.cell.period === p;
+      const inner = starts.map(chip).join('') + conts.map(s => `<span class="tchip cont">↳ ${esc(TE.mode === 'class' ? courseTitle(s.course_id) : className(s.class_id))}</span>`).join('');
+      return `<td class="${sel ? 'sel' : ''}${clash ? ' clash' : ''}">${TE.mode === 'class'
+        ? `<button type="button" class="tcell" data-day="${d}" data-period="${p}" aria-label="${DAYS[d]}, ${p}. ders">${inner || '<span class="muted">+</span>'}</button>`
+        : inner}</td>`;
+    }).join('')}</tr>`).join('')}
+    </tbody></table></div>
+    ${TE.mode === 'teacher' && slots.length ? `<p class="muted">${slots.reduce((a, s) => a + s.length, 0)} ders saati.</p>` : ''}
+  </section>`;
+
+  let editor = '';
+  if (TE.mode === 'class' && TE.cell) {
+    const { day, period } = TE.cell;
+    const here = TE.slots.filter(s => s.class_id === TE.classId && s.weekday === day && s.period === period);
+    const courses = coursesFor(TE.classId);
+    const others = S.courses.filter(c => c.active && !courses.includes(c));
+    editor = `<section class="panel">
+      <div class="head"><h2>${esc(className(TE.classId))}, ${DAYS[day]}, ${period}. ders</h2><button type="button" class="btn ghost small" id="tClose">Kapat</button></div>
+      ${here.length ? here.map(s => `<div class="tentry">
+        <div class="head"><b>${esc(courseTitle(s.course_id))}</b><span class="muted">${periodLabel(s.period, s.length)}${s.week !== 'all' ? `, ${s.week} haftası` : ''}</span>
+          <button type="button" class="btn quiet small" data-tdel="${s.id}">Kaldır</button></div>
+        <details><summary>Öğretmenler: ${esc([...(TE.teachers.get(s.id) || [])].map(ttName).join(', ') || 'yok')}</summary>${teacherBoxes('t-' + s.id, TE.teachers.get(s.id) || new Set())}</details>
+      </div>`).join('') : `<p class="muted">Bu saatte ders yok.</p>`}
+      <form id="tAdd" class="stack top-gap">
+        <h2>Ders ekle</h2>
+        <div class="grid3">
+          <label class="field">Ders<select name="course" required>${courses.map(c => opt(c.id, c.title, '')).join('')}${others.length ? `<optgroup label="Diğer dersler">${others.map(c => opt(c.id, c.title, '')).join('')}</optgroup>` : ''}</select></label>
+          <label class="field">Süre<select name="length">${[1, 2, 3, 4].map(n => opt(n, n === 1 ? '1 ders saati' : `${n} ders saati (${period}.–${period + n - 1}.)`, 1)).join('')}</select></label>
+          ${ver.ab_weeks ? `<label class="field">Hafta<select name="week">${opt('all', 'Her hafta', 'all')}${opt('A', 'A haftası', '')}${opt('B', 'B haftası', '')}</select></label>` : ''}
+        </div>
+        <div class="field">Öğretmenler${teacherBoxes('newt', new Set())}</div>
+        <div class="row"><button class="btn primary">Ekle</button></div>
+      </form>
+    </section>`;
+  }
+  view().innerHTML = top + grid + editor;
+  bindTimetable();
+}
+
+function bindTimetable() {
+  const TE = S.TE;
+  const ver = TE.versions.find(v => v.id === TE.versionId);
+  $('#tNew').onclick = () => { TE.newForm = !TE.newForm; drawTimetable(); };
+  const vsel = $('#tVer');
+  if (vsel) vsel.onchange = () => { TE.versionId = vsel.value; TE.cell = null; loadTTSlots(); };
+  const ab = $('#tAB');
+  if (ab) ab.onchange = async () => {
+    const patch = { ab_weeks: ab.checked, a_week_start: ab.checked ? (ver.a_week_start || today()) : ver.a_week_start };
+    const { error } = await sb.from('timetable_versions').update(patch).eq('id', ver.id);
+    if (fail(error, 'Program')) { ab.checked = !ab.checked; return; }
+    Object.assign(ver, patch); S.TT = null; drawTimetable();
+  };
+  const as = $('#tAStart');
+  if (as) as.onchange = async () => {
+    if (!as.value) return;
+    const { error } = await sb.from('timetable_versions').update({ a_week_start: as.value }).eq('id', ver.id);
+    if (fail(error, 'Program')) return;
+    ver.a_week_start = as.value; S.TT = null; toast('A haftası kaydedildi.');
+  };
+  const dv = $('#tDelVer');
+  if (dv) dv.onclick = async () => {
+    if (!confirm('Bu program ve içindeki bütün ders saatleri silinsin mi? Ders kayıtları ve yoklamalar silinmez.')) return;
+    const { error } = await sb.from('timetable_versions').delete().eq('id', ver.id);
+    if (fail(error, 'Program silinemedi')) return;
+    TE.versionId = null; TE.cell = null; S.TT = null;
+    toast('Program silindi.');
+    viewTimetable();
+  };
+  const nf = $('#tNewForm');
+  if (nf) nf.onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(nf);
+    const copy = f.get('copy') && ver;
+    const btn = nf.querySelector('button'); btn.disabled = true;
+    try {
+      const { data: nv, error } = await sb.from('timetable_versions').insert({
+        school_id: S.schoolId, name: String(f.get('name')).trim(), valid_from: f.get('valid_from'),
+        ab_weeks: copy ? ver.ab_weeks : false, a_week_start: copy ? ver.a_week_start : null,
+      }).select('id').single();
+      if (error && error.code === '23505') { toast('Bu başlangıç tarihiyle zaten bir program var.', true); return; }
+      if (fail(error, 'Program oluşturulamadı')) return;
+      if (copy && TE.slots.length) {
+        const key = s => [s.class_id, s.course_id, s.weekday, s.period, s.week].join('|');
+        for (const part of chunks(TE.slots, 300)) {
+          const { error: e2 } = await sb.from('timetable_slots').insert(part.map(s => ({
+            school_id: S.schoolId, version_id: nv.id, class_id: s.class_id, course_id: s.course_id,
+            weekday: s.weekday, period: s.period, length: s.length, week: s.week,
+          })));
+          if (fail(e2, 'Program kopyalanamadı')) return;
+        }
+        const { data: fresh, error: e3 } = await fetchAll(() => sb.from('timetable_slots').select('id, class_id, course_id, weekday, period, week').eq('version_id', nv.id));
+        if (fail(e3, 'Program kopyalanamadı')) return;
+        const newId = new Map(fresh.map(s => [key(s), s.id]));
+        const rows = [];
+        TE.slots.forEach(s => (TE.teachers.get(s.id) || new Set()).forEach(uid => rows.push({ slot_id: newId.get(key(s)), user_id: uid, school_id: S.schoolId })));
+        for (const part of chunks(rows.filter(r => r.slot_id), 500)) {
+          const { error: e4 } = await sb.from('timetable_teachers').insert(part);
+          if (fail(e4, 'Öğretmenler kopyalanamadı')) return;
+        }
+      }
+      TE.versionId = nv.id; TE.newForm = false; TE.cell = null; S.TT = null;
+      toast('Program oluşturuldu.');
+      viewTimetable();
+    } finally { if (btn.isConnected) btn.disabled = false; }
+  };
+  view().querySelectorAll('[data-tmode]').forEach(b => { b.onclick = () => { TE.mode = b.dataset.tmode; TE.cell = null; drawTimetable(); }; });
+  const tc = $('#tClass');
+  if (tc) tc.onchange = () => { TE.classId = tc.value; TE.cell = null; drawTimetable(); };
+  const tt = $('#tTeacher');
+  if (tt) tt.onchange = () => { TE.teacherId = tt.value; drawTimetable(); };
+  view().querySelectorAll('.tcell').forEach(b => {
+    b.onclick = () => { TE.cell = { day: Number(b.dataset.day), period: Number(b.dataset.period) }; drawTimetable(); };
+  });
+  const cl = $('#tClose');
+  if (cl) cl.onclick = () => { TE.cell = null; drawTimetable(); };
+  view().querySelectorAll('[data-tdel]').forEach(b => {
+    b.onclick = async () => {
+      if (!confirm('Bu ders programdan kaldırılsın mı?')) return;
+      const { error } = await sb.from('timetable_slots').delete().eq('id', b.dataset.tdel);
+      if (fail(error, 'Kaldırılamadı')) return;
+      TE.slots = TE.slots.filter(s => s.id !== b.dataset.tdel); TE.teachers.delete(b.dataset.tdel); S.TT = null;
+      drawTimetable();
+    };
+  });
+  view().querySelectorAll('.tentry input[type=checkbox]').forEach(cb => {
+    cb.onchange = async () => {
+      const sid = cb.name.slice(2), uid = cb.value;
+      const q = cb.checked
+        ? sb.from('timetable_teachers').insert({ slot_id: sid, user_id: uid, school_id: S.schoolId })
+        : sb.from('timetable_teachers').delete().eq('slot_id', sid).eq('user_id', uid);
+      const { error } = await q;
+      if (fail(error, 'Öğretmen kaydedilemedi')) { cb.checked = !cb.checked; return; }
+      if (!TE.teachers.has(sid)) TE.teachers.set(sid, new Set());
+      if (cb.checked) TE.teachers.get(sid).add(uid); else TE.teachers.get(sid).delete(uid);
+      S.TT = null;
+      const sum = cb.closest('details').querySelector('summary');
+      sum.textContent = 'Öğretmenler: ' + ([...TE.teachers.get(sid)].map(ttName).join(', ') || 'yok');
+    };
+  });
+  const add = $('#tAdd');
+  if (add) add.onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(add);
+    const { day, period } = TE.cell;
+    const length = Number(f.get('length') || 1);
+    if (period + length - 1 > 12) { toast('Ders 12. saati geçemez.', true); return; }
+    const btn = add.querySelector('button'); btn.disabled = true;
+    try {
+      const { data: slot, error } = await sb.from('timetable_slots').insert({
+        school_id: S.schoolId, version_id: TE.versionId, class_id: TE.classId, course_id: f.get('course'),
+        weekday: day, period, length, week: f.get('week') || 'all',
+      }).select('id, class_id, course_id, weekday, period, length, week').single();
+      if (error && error.code === '23505') { toast('Bu ders bu saatte zaten var.', true); return; }
+      if (fail(error, 'Eklenemedi')) return;
+      const uids = f.getAll('newt');
+      if (uids.length) {
+        const { error: e2 } = await sb.from('timetable_teachers').insert(uids.map(u => ({ slot_id: slot.id, user_id: u, school_id: S.schoolId })));
+        if (fail(e2, 'Öğretmenler kaydedilemedi')) return;
+      }
+      TE.slots.push(slot); TE.teachers.set(slot.id, new Set(uids)); S.TT = null;
+      toast('Ders programa eklendi.');
+      drawTimetable();
+    } finally { if (btn.isConnected) btn.disabled = false; }
+  };
+}
+
 // ---------- Okul (yönetici) ----------
 function memberRow(m, p, pending) {
   const me = m.user_id === S.user.id;
@@ -2477,7 +3107,7 @@ setInterval(async () => {
 sb.auth.onAuthStateChange(event => {
   if (event === 'PASSWORD_RECOVERY') setTimeout(() => renderAuth('setpass'), 0);
   if (event === 'SIGNED_OUT') {
-    Object.assign(S, { user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null, L: null, X: null, AN: null, CM: null, tab: 'lessons' });
+    Object.assign(S, { user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null, L: null, X: null, AN: null, CM: null, KM: null, TT: null, TE: null, tab: 'lessons' });
     setTimeout(() => renderAuth('login'), 0);
   }
 });
