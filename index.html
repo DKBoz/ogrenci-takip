@@ -264,6 +264,19 @@ table.tgrid { border-collapse: separate; border-spacing: 4px; font-size: .9rem; 
 .tentry { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
 .tentry summary { cursor: pointer; color: var(--muted); }
 .tboxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0 8px; }
+textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; font-weight: 400; resize: vertical; }
+.pcourse > summary { font-size: 1.05rem; }
+.pbody { padding: 0 12px 14px; display: grid; gap: 12px; }
+.pbody h3 { margin: 6px 0 0; font-size: 1rem; }
+.plainlist { list-style: none; margin: 0; padding: 4px 12px 12px; display: grid; gap: 6px; }
+@media print {
+  .top, .tabs, .noprint, #toast, .savebar { display: none !important; }
+  body { background: #fff; color: #000; }
+  .wrap { padding: 0; max-width: none; }
+  .panel, .unit { border: 0; padding: 0; }
+  .comment { background: none; padding: 0; }
+  .scroll { overflow: visible; }
+}
 
 #toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 140%);
@@ -287,7 +300,7 @@ const SUPABASE_URL = 'https://ixqeazpoerbpryrvamkr.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_KnM1ZYjZZ6xsMnnyIE41IA_hwYE-wCv';
 // ========================================================================
 
-const APP_VERSION = '0.11';
+const APP_VERSION = '0.12';
 const BOOT_HASH = location.hash;
 const IDLE_MINUTES = 60; // bu kadar dakika işlem yapılmazsa otomatik çıkış
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -304,7 +317,7 @@ const S = {
   tab: 'lessons', year: currentYear(), classes: [], courses: [], objCache: {},
   L: null, students: [], objectives: [], recent: [],
   classView: null, courseView: null, importPreview: null, coursePreview: null, authMode: 'login',
-  X: null, AN: null, CM: null, KM: null, TT: null, TE: null, today: [],
+  X: null, AN: null, CM: null, KM: null, TT: null, TE: null, SP: null, today: [],
 };
 
 // ---------- Yardımcılar ----------
@@ -493,7 +506,7 @@ async function openSchool(id) {
   S.schoolId = id;
   S.role = (S.memberships.find(m => m.school_id === id) || {}).role;
   keep('school', id);
-  S.objCache = {}; S.L = null; S.X = null; S.AN = null; S.CM = null; S.KM = null; S.TT = null; S.TE = null; S.classView = null; S.courseView = null; S.importPreview = null; S.coursePreview = null;
+  S.objCache = {}; S.L = null; S.X = null; S.AN = null; S.CM = null; S.KM = null; S.TT = null; S.TE = null; S.SP = null; S.classView = null; S.courseView = null; S.importPreview = null; S.coursePreview = null;
   await Promise.all([loadClasses(), loadCourses()]);
   renderShell();
 }
@@ -519,7 +532,7 @@ async function getObjectives(courseId) {
 const yearClasses = () => S.classes.filter(c => c.academic_year === S.year);
 
 function renderShell() {
-  const tabs = [['lessons', 'Ders ve yoklama'], ['exams', 'Sınavlar'], ['analysis', 'Analiz'], ['map', 'Kazanımlar'], ['comments', 'Yorumlar'], ['classes', 'Sınıflar'], ['courses', 'Dersler']];
+  const tabs = [['lessons', 'Ders ve yoklama'], ['exams', 'Sınavlar'], ['analysis', 'Analiz'], ['map', 'Kazanımlar'], ['student', 'Öğrenci'], ['comments', 'Yorumlar'], ['classes', 'Sınıflar'], ['courses', 'Dersler']];
   if (isAdmin()) tabs.push(['timetable', 'Program'], ['school', 'Okul']);
   if (!tabs.some(t => t[0] === S.tab)) S.tab = 'lessons';
   app.innerHTML = `${topBar()}
@@ -536,7 +549,7 @@ function renderShell() {
       renderShell();
     };
   });
-  ({ lessons: viewLessons, exams: viewExams, analysis: viewAnalysis, map: viewMap, comments: viewComments, classes: viewClasses, courses: viewCourses, timetable: viewTimetable, school: viewSchool })[S.tab]();
+  ({ lessons: viewLessons, exams: viewExams, analysis: viewAnalysis, map: viewMap, student: viewStudent, comments: viewComments, classes: viewClasses, courses: viewCourses, timetable: viewTimetable, school: viewSchool })[S.tab]();
 }
 
 // ---------- Ders ve yoklama ----------
@@ -890,7 +903,7 @@ async function showClass(id) {
   const st = (data || []).sort(byNo);
   box.innerHTML = `<section class="panel">
     <div class="head"><h2>${esc(c.name)}</h2><span class="muted">${st.length} öğrenci${c.grade ? ', düzey ' + esc(c.grade) : ''}</span></div>
-    ${st.length ? `<ol class="plain">${st.map(s => `<li><span class="no">${esc(s.school_no || '')}</span><span>${esc(s.full_name)}</span>
+    ${st.length ? `<ol class="plain">${st.map(s => `<li><span class="no">${esc(s.school_no || '')}</span><span><button type="button" class="link" data-prof="${s.id}">${esc(s.full_name)}</button></span>
       ${isAdmin() ? `<span class="row"><select class="move" data-move="${s.id}" aria-label="${esc(s.full_name)} için sınıf">
         ${yearClasses().map(k => opt(k.id, k.id === id ? 'Sınıf: ' + k.name : k.name + ' sınıfına taşı', id)).join('')}</select>
         <button type="button" class="btn quiet small" data-off="${s.id}">Listeden çıkar</button></span>` : '<span></span>'}</li>`).join('')}</ol>`
@@ -925,6 +938,7 @@ async function showClass(id) {
       viewClasses();
     };
   });
+  box.querySelectorAll('[data-prof]').forEach(b => { b.onclick = () => openProfile(b.dataset.prof, id); });
   box.querySelectorAll('[data-off]').forEach(b => {
     b.onclick = async () => {
       if (!confirm('Öğrenci listeden çıkarılsın mı? Kayıtları silinmez.')) return;
@@ -2405,7 +2419,7 @@ function drawComments() {
       ? `<div class="cblock"><div class="head"><b>Sonuç yorumu</b><span class="muted">${OUT_WORD[res.out.level]}, %${Math.round(res.out.pct * 100)}</span><button type="button" class="btn quiet small" data-copy="${st.id}" data-part="out">Kopyala</button></div><p class="comment" lang="${CM.lang}">${esc(res.out.text)}</p></div>`
       : `<p class="comment empty">Bu kapsamda sınav ya da quiz sonucu girildiğinde sonuç yorumu burada oluşur.</p>`;
     return `<article class="panel student">
-      <div class="s-left"><div class="head"><b>${st.school_no ? `<span class="muted">${esc(st.school_no)}</span> ` : ''}${esc(st.full_name)}</b>
+      <div class="s-left"><div class="head"><b>${st.school_no ? `<span class="muted">${esc(st.school_no)}</span> ` : ''}<button type="button" class="link" data-prof="${st.id}">${esc(st.full_name)}</button></b>
         <span class="chips">${res && res.proc ? `<span class="chip l${lc(res.proc.overall)}">Süreç: ${esc(levelName(res.proc.overall))}</span>` : ''}
         ${a && a.total ? `<span class="chip">Devam: ${a.attended}/${a.total} ders</span>` : ''}</span></div>${left}</div>
       <div class="s-right">${procBlock}${outBlock}${linkBlock}
@@ -2421,6 +2435,7 @@ function drawComments() {
     b.onclick = () => { CM.lang = b.dataset.lang; keep('cm_' + S.schoolId, { classId: CM.classId, courseId: CM.courseId, unit: CM.unit, lang: CM.lang }); drawComments(); };
   });
   view().querySelectorAll('.lv').forEach(b => { b.onclick = () => setScore(b.dataset.sid, b.dataset.o, Number(b.dataset.v)); });
+  view().querySelectorAll('[data-prof]').forEach(b => { b.onclick = () => openProfile(b.dataset.prof, CM.classId); });
   view().querySelectorAll('[data-note]').forEach(inp => {
     inp.oninput = () => {
       const sid = inp.dataset.note;
@@ -2666,7 +2681,7 @@ function drawMap() {
             return { stu, pct: d.stuObj[stu.id][o.id], r: d.rub.get(stu.id + '|' + o.id), missed };
           }).sort((a, b) => (a.pct == null) - (b.pct == null) || (a.pct ?? 0) - (b.pct ?? 0) || byNo(a.stu, b.stu));
           detail = `<tr class="detail"><td colspan="5"><table class="list"><thead><tr><th>Öğrenci</th><th>Sınav</th><th>Rubrik</th><th>Kaçırdığı ders</th></tr></thead><tbody>
-            ${rows.map(r => `<tr><td>${esc(r.stu.full_name)}</td><td>${r.pct == null ? '–' : `<span class="chip l${pctLv(r.pct)}">%${Math.round(r.pct * 100)}</span>`}</td>
+            ${rows.map(r => `<tr><td><button type="button" class="link" data-prof="${r.stu.id}">${esc(r.stu.full_name)}</button></td><td>${r.pct == null ? '–' : `<span class="chip l${pctLv(r.pct)}">%${Math.round(r.pct * 100)}</span>`}</td>
               <td>${r.r == null ? '–' : r.r + ' / ' + d.mx}</td><td>${s.taught.length ? `${r.missed}/${s.taught.length}` : '–'}</td></tr>`).join('')}
           </tbody></table></td></tr>`;
         }
@@ -2727,6 +2742,7 @@ function bindMap() {
   view().querySelectorAll('[data-obj]').forEach(b => {
     b.onclick = () => { KM.open = KM.open === b.dataset.obj ? null : b.dataset.obj; drawMap(); };
   });
+  view().querySelectorAll('[data-prof]').forEach(b => { b.onclick = () => openProfile(b.dataset.prof, KM.classId); });
 }
 
 // ---------- Ders programı ----------
@@ -3029,6 +3045,226 @@ function bindTimetable() {
   };
 }
 
+// ---------- Öğrenci profili ----------
+async function viewStudent() {
+  const cls = yearClasses();
+  if (!cls.length) { view().innerHTML = empty('Öğrenci profili için önce sınıf listesi eklenmeli.'); return; }
+  if (!S.SP || !cls.some(c => c.id === S.SP.classId)) {
+    const last = restore('sp_' + S.schoolId, {});
+    S.SP = { classId: (cls.find(c => c.id === last.classId) || cls[0]).id, studentId: last.studentId || null, lang: 'tr', d: null };
+  }
+  await loadStudentList();
+}
+
+function openProfile(studentId, classId) {
+  S.SP = { classId, studentId, lang: (S.SP && S.SP.lang) || 'tr', d: null };
+  S.tab = 'student';
+  renderShell();
+}
+
+async function loadStudentList() {
+  const SP = S.SP;
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  const { data, error } = await sb.from('students').select('id, full_name, school_no').eq('class_id', SP.classId).eq('active', true);
+  if (fail(error, 'Öğrenciler')) return;
+  SP.list = (data || []).sort(byNo);
+  if (!SP.list.some(s => s.id === SP.studentId)) SP.studentId = SP.list[0] ? SP.list[0].id : null;
+  await loadProfile();
+}
+
+async function loadProfile() {
+  const SP = S.SP;
+  SP.d = null;
+  if (!SP.studentId) { drawProfile(); return; }
+  view().innerHTML = `<p class="muted pad">Yükleniyor…</p>`;
+  const sid = SP.studentId;
+  const stu = SP.list.find(s => s.id === sid);
+  const [ls, at, ac, rs, nt, op, ab] = await Promise.all([
+    fetchAll(() => sb.from('lessons').select('id, course_id, lesson_date, period').eq('class_id', SP.classId)),
+    fetchAll(() => sb.from('attendance').select('lesson_id, status').eq('student_id', sid)),
+    fetchAll(() => sb.from('assessment_classes').select('assessment_id, given_on').eq('class_id', SP.classId)),
+    fetchAll(() => sb.from('rubric_scores').select('objective_id, score').eq('student_id', sid)),
+    sb.from('student_notes').select('course_id, parent_note, internal_note').eq('student_id', sid),
+    fetchAll(() => sb.from('objective_performance').select('objective_id, pct, max_total').eq('student_id', sid)),
+    fetchAll(() => sb.from('objective_absence_compare').select('objective_id, pct, lessons_taught, lessons_missed, present_avg, present_n').eq('student_id', sid)),
+  ]);
+  for (const r of [ls, at, ac, rs, nt, op, ab]) if (fail(r.error, 'Profil')) return;
+  const lessons = ls.data;
+  const attBy = new Map(at.data.map(r => [r.lesson_id, r.status]));
+  const lessonObjs = new Map();
+  for (const part of chunks(lessons.map(l => l.id), 150)) {
+    const { data, error } = await fetchAll(() => sb.from('lesson_objectives').select('lesson_id, objective_id').in('lesson_id', part));
+    if (fail(error, 'Ders kazanımları')) return;
+    data.forEach(r => { if (!lessonObjs.has(r.lesson_id)) lessonObjs.set(r.lesson_id, new Set()); lessonObjs.get(r.lesson_id).add(r.objective_id); });
+  }
+  // Sınavlar: öğrencinin puanı ve sınıf ortalaması
+  const givenOn = new Map(ac.data.map(r => [r.assessment_id, r.given_on]));
+  let exams = [];
+  if (givenOn.size) {
+    const { data, error } = await fetchAll(() => sb.from('assessments').select('id, course_id, title, kind').in('id', [...givenOn.keys()]));
+    if (fail(error, 'Sınavlar')) return;
+    exams = data.map(a => ({ ...a, given_on: givenOn.get(a.id), items: [] }));
+  }
+  if (exams.length) {
+    const byId = new Map(exams.map(e => [e.id, e]));
+    const { data: items, error } = await fetchAll(() => sb.from('assessment_items').select('id, assessment_id, max_points').in('assessment_id', exams.map(e => e.id)));
+    if (fail(error, 'Sorular')) return;
+    items.forEach(i => byId.get(i.assessment_id).items.push({ id: i.id, max: Number(i.max_points) }));
+    const classIds = SP.list.map(s => s.id);
+    const pts = new Map();
+    for (const part of chunks(items.map(i => i.id), 150)) {
+      const { data, error: e2 } = await fetchAll(() => sb.from('item_results').select('item_id, student_id, points').in('item_id', part).in('student_id', classIds));
+      if (fail(e2, 'Sonuçlar')) return;
+      data.forEach(r => pts.set(r.student_id + '|' + r.item_id, Number(r.points)));
+    }
+    exams.forEach(e => {
+      const max = e.items.reduce((a, i) => a + i.max, 0);
+      const scoreOf = id => e.items.some(i => pts.has(id + '|' + i.id)) ? e.items.reduce((a, i) => a + (pts.get(id + '|' + i.id) || 0), 0) : null;
+      e.max = max;
+      e.mine = scoreOf(sid);
+      const all = classIds.map(scoreOf).filter(v => v != null);
+      e.avg = all.length && max ? all.reduce((a, b) => a + b, 0) / all.length / max : null;
+    });
+  }
+  // Ders listesi: sınıfın düzeyine uyan dersler ve kayıt olan her ders
+  const used = new Set([...lessons.map(l => l.course_id), ...exams.map(e => e.course_id)]);
+  const courseIds = [...new Set([...coursesFor(SP.classId).map(c => c.id), ...used])].filter(id => S.courses.some(c => c.id === id));
+  const objsBy = {};
+  await Promise.all(courseIds.map(async id => { objsBy[id] = await getObjectives(id); }));
+  const allObj = new Set(Object.values(objsBy).flat().map(o => o.id));
+  const rubricIds = new Set(rs.data.map(r => r.objective_id));
+  const courses = courseIds.filter(id => used.has(id) || objsBy[id].some(o => rubricIds.has(o.id)) || coursesFor(SP.classId).some(c => c.id === id))
+    .map(id => S.courses.find(c => c.id === id)).sort((a, b) => a.title.localeCompare(b.title, 'tr', { numeric: true }));
+  SP.d = {
+    stu, lessons, attBy, lessonObjs, exams, courses, objsBy, allObj,
+    scores: new Map(rs.data.map(r => [r.objective_id, Number(r.score)])),
+    tests: new Map(op.data.map(r => [r.objective_id, { pct: Number(r.pct), max: Number(r.max_total) }])),
+    notes: new Map((nt.data || []).map(r => [r.course_id, r])),
+    abs: ab.data.map(r => ({ ...r, pct: Number(r.pct), present_avg: r.present_avg == null ? null : Number(r.present_avg), lessons_taught: Number(r.lessons_taught), lessons_missed: Number(r.lessons_missed), present_n: Number(r.present_n) })),
+  };
+  keep('sp_' + S.schoolId, { classId: SP.classId, studentId: SP.studentId });
+  drawProfile();
+}
+
+function attSummary(lessons, attBy) {
+  const a = { total: 0, present: 0, absent: 0, late: 0, excused: 0 };
+  lessons.forEach(l => { const st = attBy.get(l.id); if (!st) return; a.total++; a[st]++; });
+  a.attended = a.present + a.late;
+  return a;
+}
+
+function drawProfile() {
+  const SP = S.SP, d = SP.d;
+  const head = `<section class="panel noprint">
+    <div class="grid3">
+      <label class="field">Sınıf<select id="pClass">${yearClasses().map(c => opt(c.id, c.name, SP.classId)).join('')}</select></label>
+      <label class="field">Öğrenci<select id="pStu">${(SP.list || []).map(s => opt(s.id, `${s.school_no ? s.school_no + ' ' : ''}${s.full_name}`, SP.studentId)).join('')}</select></label>
+      <div class="field">Yorum dili<div class="seg" role="group" aria-label="Yorum dili">${Object.entries(LANGS).map(([k, l]) => `<button type="button" data-plang="${k}" aria-pressed="${SP.lang === k}">${l}</button>`).join('')}</div></div>
+    </div>
+    <div class="row"><button type="button" class="btn small" id="pPrev">Önceki öğrenci</button><button type="button" class="btn small" id="pNext">Sonraki öğrenci</button>
+      <button type="button" class="btn small" id="pPrint">Yazdır</button></div>
+  </section>`;
+  if (!d) { view().innerHTML = head + empty('Bu sınıfta öğrenci yok.'); bindProfile(); return; }
+  const all = attSummary(d.lessons, d.attBy);
+  const cls = S.classes.find(c => c.id === SP.classId) || {};
+  const absences = d.lessons.filter(l => ['absent', 'excused', 'late'].includes(d.attBy.get(l.id)))
+    .sort((a, b) => b.lesson_date.localeCompare(a.lesson_date) || b.period - a.period);
+  const stLabel = { absent: 'Yok', excused: 'İzinli', late: 'Geç' };
+
+  const courseHtml = d.courses.map((c, ci) => {
+    const objs = d.objsBy[c.id] || [];
+    const cl = d.lessons.filter(l => l.course_id === c.id);
+    const ca = attSummary(cl, d.attBy);
+    const exams = d.exams.filter(e => e.course_id === c.id).sort((a, b) => a.given_on.localeCompare(b.given_on));
+    const mx = scaleMax(c);
+    const taught = new Map();
+    cl.forEach(l => (d.lessonObjs.get(l.id) || new Set()).forEach(o => { const t = taught.get(o) || { n: 0, missed: 0 }; t.n++; if (['absent', 'excused'].includes(d.attBy.get(l.id))) t.missed++; taught.set(o, t); }));
+    const hasData = o => d.tests.has(o.id) || d.scores.get(o.id) >= 1 || taught.has(o.id);
+    // Veli yorumları (tüm üniteler)
+    const CM = { lang: SP.lang, mx, courseId: c.id, unit: 'all', objs, students: [d.stu],
+      scores: new Map([...d.scores].map(([k, v]) => [d.stu.id + '|' + k, v])),
+      tests: new Map([...d.tests].map(([k, v]) => [d.stu.id + '|' + k, v])),
+      notes: new Map([[d.stu.id, (d.notes.get(c.id) || {}).parent_note || '']]),
+      att: new Map([[d.stu.id, { total: ca.total, attended: ca.attended }]]) };
+    const res = buildComments(CM)[0];
+    const links = d.abs.filter(r => objs.some(o => o.id === r.objective_id) && r.lessons_missed > 0 && r.pct < ABS_LINK.maxPct && r.present_avg != null && r.present_avg - r.pct >= ABS_LINK.minGap);
+    const units = groupUnits(objs.filter(hasData));
+    const empty_ = !cl.length && !exams.length && !units.length;
+    return `<details class="unit pcourse" ${ci === 0 || !empty_ ? 'open' : ''}>
+      <summary>${esc(c.title)} <span class="muted">${empty_ ? '(henüz veri yok)' : ca.total ? `(devam ${ca.attended}/${ca.total})` : ''}</span></summary>
+      <div class="pbody">
+      ${exams.length ? `<h3>Sınav ve quizler</h3><div class="scroll"><table class="list"><thead><tr><th>Sınav</th><th>Tarih</th><th>Puanı</th><th>Sınıf ortalaması</th></tr></thead><tbody>
+        ${exams.map(e => `<tr><td>${esc(e.title)}<small>${KINDS[e.kind] || ''}</small></td><td>${esc(shortDate(e.given_on))}</td>
+          <td>${e.mine == null ? '<span class="muted">Girmedi</span>' : `<span class="chip l${pctLv(e.max ? e.mine / e.max : 0)}">${fmtNum(e.mine)}/${fmtNum(e.max)} (%${Math.round(e.max ? e.mine / e.max * 100 : 0)})</span>`}</td>
+          <td>${e.avg == null ? '–' : '%' + Math.round(e.avg * 100)}</td></tr>`).join('')}
+      </tbody></table></div>` : ''}
+      ${units.length ? `<h3>Kazanımlar</h3><div class="scroll"><table class="list"><thead><tr><th>Kazanım</th><th>Sınav</th><th>Rubrik</th><th>Kaçırdığı ders</th></tr></thead><tbody>
+        ${units.map(u => `<tr class="urow"><td colspan="4">${esc(u.name || 'Ünite')}</td></tr>` + u.items.map(o => {
+          const t = d.tests.get(o.id), r = d.scores.get(o.id), tg = taught.get(o.id);
+          return `<tr><td>${esc(o.label)}</td><td>${t ? `<span class="chip l${pctLv(t.pct)}">%${Math.round(t.pct * 100)}</span>` : '–'}</td>
+            <td>${r >= 1 ? `${r} / ${mx}` : '–'}</td><td>${tg ? `${tg.missed}/${tg.n}` : '–'}</td></tr>`;
+        }).join('')).join('')}
+      </tbody></table></div>` : ''}
+      ${links.length ? `<div class="tnote noprint"><b>Yalnızca öğretmenler görür: devamsızlıkla bağlantılı olabilecek kazanımlar</b>
+        <ul>${links.map(r => `<li>${esc(objLabel(r.objective_id))}: işlendiği ${r.lessons_taught} dersten ${r.lessons_missed} tanesine katılmadı. Sınavda %${Math.round(r.pct * 100)}, katılanların ortalaması %${Math.round(r.present_avg * 100)}.</li>`).join('')}</ul></div>` : ''}
+      ${res ? `<h3>Veli yorumu (tüm üniteler)</h3>
+        ${res.proc ? `<div class="cblock"><div class="head"><b>Süreç</b><button type="button" class="btn quiet small noprint" data-pcopy="${ci}" data-part="proc">Kopyala</button></div><p class="comment" lang="${SP.lang}">${esc(res.proc.text)}</p></div>` : ''}
+        ${res.out ? `<div class="cblock"><div class="head"><b>Sonuç</b><span class="muted">${OUT_WORD[res.out.level]}, %${Math.round(res.out.pct * 100)}</span><button type="button" class="btn quiet small noprint" data-pcopy="${ci}" data-part="out">Kopyala</button></div><p class="comment" lang="${SP.lang}">${esc(res.out.text)}</p></div>` : ''}` : ''}
+      <label class="field noprint">Öğretmen notu (yalnızca öğretmenler görür, veliye gitmez)
+        <textarea class="inote" data-inote="${c.id}" rows="2" maxlength="1000" placeholder="Örneğin veli görüşmesinde konuşulanlar">${esc((d.notes.get(c.id) || {}).internal_note || '')}</textarea></label>
+      </div></details>`;
+  }).join('');
+
+  view().innerHTML = head + `<section class="panel profile">
+    <div class="head"><h2>${esc(d.stu.full_name)}</h2><span class="muted">${d.stu.school_no ? 'No ' + esc(d.stu.school_no) + ', ' : ''}${esc(cls.name || '')}, ${esc(S.year)}</span></div>
+    <div class="stats">
+      <div class="stat"><span class="muted">Katıldığı ders</span><b>${all.total ? `${all.attended}/${all.total}` : '–'}</b>${all.total ? `<div class="bar"><i style="width:${all.attended / all.total * 100}%"></i></div>` : ''}</div>
+      <div class="stat"><span class="muted">Devamsız</span><b>${all.absent}</b></div>
+      <div class="stat"><span class="muted">İzinli</span><b>${all.excused}</b></div>
+      <div class="stat"><span class="muted">Geç</span><b>${all.late}</b></div>
+    </div>
+    ${absences.length ? `<details class="unit"><summary>Devamsızlık ve geç kalma kayıtları <span class="muted">(${absences.length})</span></summary>
+      <ul class="plainlist">${absences.map(l => `<li><span class="chip ${l && d.attBy.get(l.id) === 'absent' ? 'l1' : d.attBy.get(l.id) === 'late' ? 'l2' : 'l3'}">${stLabel[d.attBy.get(l.id)]}</span> ${esc(fmtDate(l.lesson_date))}, ${l.period}. ders, ${esc(courseTitle(l.course_id))}</li>`).join('')}</ul></details>` : ''}
+  </section>
+  ${d.courses.length ? courseHtml : empty('Bu öğrencinin sınıfı için ders bulunamadı.')}`;
+  bindProfile();
+}
+
+function bindProfile() {
+  const SP = S.SP, d = SP.d;
+  $('#pClass').onchange = e => { SP.classId = e.target.value; SP.studentId = null; loadStudentList(); };
+  const ps = $('#pStu');
+  if (ps) ps.onchange = () => { SP.studentId = ps.value; loadProfile(); };
+  const step = k => {
+    const i = (SP.list || []).findIndex(s => s.id === SP.studentId);
+    const n = SP.list[i + k];
+    if (n) { SP.studentId = n.id; loadProfile(); }
+  };
+  $('#pPrev').onclick = () => step(-1);
+  $('#pNext').onclick = () => step(1);
+  $('#pPrint').onclick = () => { view().querySelectorAll('details').forEach(x => { x.open = true; }); window.print(); };
+  view().querySelectorAll('[data-plang]').forEach(b => { b.onclick = () => { SP.lang = b.dataset.plang; drawProfile(); }; });
+  view().querySelectorAll('[data-pcopy]').forEach(b => {
+    b.onclick = async () => {
+      const p = b.closest('.cblock').querySelector('.comment');
+      try { await navigator.clipboard.writeText(p.textContent); toast('Yorum kopyalandı.'); } catch (e) { toast('Kopyalanamadı.', true); }
+    };
+  });
+  view().querySelectorAll('[data-inote]').forEach(ta => {
+    ta.oninput = () => {
+      const cid = ta.dataset.inote;
+      clearTimeout(ta.timer);
+      ta.timer = setTimeout(async () => {
+        const { error } = await sb.from('student_notes').upsert({ student_id: SP.studentId, course_id: cid, school_id: S.schoolId, internal_note: ta.value.trim() }, { onConflict: 'student_id,course_id' });
+        if (fail(error, 'Not kaydedilemedi')) return;
+        const cur = d.notes.get(cid) || {};
+        d.notes.set(cid, { ...cur, internal_note: ta.value.trim() });
+        toast('Not kaydedildi.');
+      }, 800);
+    };
+  });
+}
+
 // ---------- Okul (yönetici) ----------
 function memberRow(m, p, pending) {
   const me = m.user_id === S.user.id;
@@ -3109,7 +3345,7 @@ setInterval(async () => {
 sb.auth.onAuthStateChange(event => {
   if (event === 'PASSWORD_RECOVERY') setTimeout(() => renderAuth('setpass'), 0);
   if (event === 'SIGNED_OUT') {
-    Object.assign(S, { user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null, L: null, X: null, AN: null, CM: null, KM: null, TT: null, TE: null, tab: 'lessons' });
+    Object.assign(S, { user: null, profile: null, memberships: [], schools: [], schoolId: null, role: null, L: null, X: null, AN: null, CM: null, KM: null, TT: null, TE: null, SP: null, tab: 'lessons' });
     setTimeout(() => renderAuth('login'), 0);
   }
 });
